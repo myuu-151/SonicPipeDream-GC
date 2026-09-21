@@ -87,9 +87,11 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
         local round = self.data.sections[math.min(self.section, #self.data.sections)]
         -- free memory, in KB: THE number on a 24 MB machine. (0 where the engine cannot tell.)
         local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or 0
-        self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  free %d KB",
+        -- how the SD card is read: dma27 is the fast one, and needs a semi-passive adapter
+        local sd = (System.GetStorageMode ~= nil) and System.GetStorageMode() or ""
+        self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  free %d KB  %s",
                                            self.fpsFrames / self.fpsTime, math.floor(self.worstFrame * 1000.0 + 0.5),
-                                           self.piecesShown, free))
+                                           self.piecesShown, free, sd))
         self.fpsTime, self.fpsFrames, self.worstFrame = 0.0, 0, 0.0
     end
 """),
