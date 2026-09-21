@@ -14,8 +14,8 @@ SOUNDS     The PC keeps its two music tracks as raw PCM: 46 MB, twice this machi
            for) but go down to mono 22 kHz, which takes them from 2 MB to about half a megabyte.
 
 SKY        The PC's classic sky is a 384-frame show of diamond patterns, about 200 MB. It is THAT
-           sky here too, cut to fit: every fourth frame at full size -- 96 frames of 512 x 256,
-           about 6 MB once cooked. See sky().
+           sky here too, cut to fit: every second frame, at half the size -- 192 frames of
+           256 x 128, about 3 MB once cooked. See sky().
 """
 
 import io
@@ -116,11 +116,12 @@ def sonic():
     print("Sonic: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
 
 
-SKY_EVERY = 4                       # keep every Nth frame of the PC's 384: 96 frames. Sky.lua is told the same
-SKY_SHRINK = 1                      # at the PC's full 512 x 256: halved, it was plainly blurry on the dome.
-                                    # Cooked, a frame is 64 KB, so 6 MB in all. The size must stay a power of
-                                    # two (the texture repeats, and GX only repeats those), so the way to pay
-                                    # for sharpness is frames, not an in-between size.
+SKY_EVERY = 2                       # keep every Nth frame of the PC's 384: 192 frames. Sky.lua is told the same
+SKY_SHRINK = 2                      # and halve them: 256 x 128. Cooked, a frame is 16 KB, so 3 MB in all.
+# TRIED AND REJECTED (2026-09-21): every fourth frame at the full 512 x 256. Sharper, but 96 frames
+# is too few to read as motion, and its 6 MB crashed the console: the sky has about 3 MB to live
+# in. The size must be a power of two (the texture repeats, and GX only repeats those), so there
+# is no in-between size to try. Sharper than this means NOT HOLDING EVERY FRAME IN MEMORY.
 
 
 def sky():

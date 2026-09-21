@@ -28,8 +28,8 @@ local CLUSTER_FRAMES = 8
 -- Keep in step with SKIES in native/gen_sky_variants.py.
 local SKY_NAMES = { "Midnight", "Dawn", "Pastel", "Sunset", "Aurora", "Inferno", "Noir" }
 
-local MEDLEY_FRAMES = 96
-local MEDLEY_KEEP = 0.25      -- one frame in four of the PC's show is here
+local MEDLEY_FRAMES = 192
+local MEDLEY_KEEP = 0.5       -- one frame in two of the PC's show is here
 -- Loading every medley frame in one go stalls the scene for seconds, so they
 -- come in a few per tick, in the order they will be shown.
 local MEDLEY_LOADS_PER_TICK = 2

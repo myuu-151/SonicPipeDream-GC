@@ -117,14 +117,14 @@ end
 # Scripts that are the PC's with a change or two (or none).
 OTHERS = {
     "SpecialStageMusic.lua": [],
-    # The PC's sky with a quarter of the frames (export_assets_gc.py's SKY_EVERY keeps every
-    # fourth), so stepped through at a quarter of the rate to run at the same speed; and brought
+    # The PC's sky with half the frames (export_assets_gc.py's SKY_EVERY keeps every
+    # second), so stepped through at half the rate to run at the same speed; and brought
     # in from the disc two a tick, not eight.
     # The rate is scaled WHERE IT IS USED, not where it is set: medleyFramesPerSecond is a
     # property, the scene file stores the PC's 14, and a stored property beats the default in
     # Create(). Changing the default did nothing and the sky ran at double speed.
     "Sky.lua": [
-        ("local MEDLEY_FRAMES = 384\n", "local MEDLEY_FRAMES = 96\nlocal MEDLEY_KEEP = 0.25      -- one frame in four of the PC's show is here\n"),
+        ("local MEDLEY_FRAMES = 384\n", "local MEDLEY_FRAMES = 192\nlocal MEDLEY_KEEP = 0.5       -- one frame in two of the PC's show is here\n"),
         ("local MEDLEY_LOADS_PER_TICK = 8\n", "local MEDLEY_LOADS_PER_TICK = 2\n"),
         ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),
         ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),

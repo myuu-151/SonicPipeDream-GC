@@ -50,7 +50,7 @@ nothing about the console's fill rate or triangle budget.
 |---|---|
 | Track, rings, bombs, checks, emerald | In. One palette a stage. A piece is 3,500 to 21,200 triangles; only those within 72 frames ahead are shown. |
 | Sonic | In: the PC's 33 meshes as they are (1.7 MB). |
-| Sky | The PC's medley: every fourth frame at full size, 96 frames, 7 MB cooked with the stars. |
+| Sky | The PC's medley: every second frame at half size (256 x 128), 192 frames, 4 MB cooked with the stars. Full size at 96 frames was tried: too few frames to read as motion, and 7 MB crashed it. |
 | Music | The PC's two tracks, mono 32 kHz Vorbis, streamed from the disc by the engine. |
 | Sound effects | Ring, lose rings, jump, checkpoint, emerald: mono 22 kHz PCM. |
 | Light | Stronger sun, lower ambient than the PC: the GX renderer has diffuse light only. |
