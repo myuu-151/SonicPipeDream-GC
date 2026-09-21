@@ -1,0 +1,8 @@
+# Build output
+proj/Packaged/
+proj/Intermediate/
+proj/Generated/
+proj/Build/
+proj/Saves/
+
+__pycache__/
