@@ -544,8 +544,10 @@ function SpecialStage:Tick(deltaTime)
     self.fpsTime, self.fpsFrames = self.fpsTime + deltaTime, self.fpsFrames + 1
     if (self.fpsTime >= 0.5) then
         local round = self.data.sections[math.min(self.section, #self.data.sections)]
-        self.readout:SetText(string.format("%.1f fps   %d pieces   RINGS %d / %d", self.fpsFrames / self.fpsTime,
-                                           self.piecesShown, self.rings, round.quota))
+        -- free memory, in KB: THE number on a 24 MB machine. (0 where the engine cannot tell.)
+        local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or 0
+        self.readout:SetText(string.format("%.1f fps  %d pieces  RINGS %d/%d  free %d KB", self.fpsFrames / self.fpsTime,
+                                           self.piecesShown, self.rings, round.quota, free))
         self.fpsTime, self.fpsFrames = 0.0, 0
     end
     self:Collide(before)

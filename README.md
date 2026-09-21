@@ -50,13 +50,22 @@ nothing about the console's fill rate or triangle budget.
 |---|---|
 | Track, rings, bombs, checks, emerald | In. One palette a stage. A piece is 3,500 to 21,200 triangles; only those within 72 frames ahead are shown. |
 | Sonic | In: the PC's 33 meshes as they are (1.7 MB). |
-| Sky | The PC's medley: every second frame at half size (256 x 128), 192 frames, 4 MB cooked with the stars. Full size at 96 frames was tried: too few frames to read as motion, and 7 MB crashed it. |
+| Sky | The PC's OWN medley: all 384 frames at 512 x 256, STREAMED. `Sky.lua` asks for the next few frames in the background, shows each as it arrives and lets the old ones go, so about half a megabyte is in memory however big the show is (25 MB cooked on the disc). Holding the sky in memory was tried three ways and looked bad or crashed. |
 | Music | The PC's two tracks, mono 32 kHz Vorbis, streamed from the disc by the engine. |
 | Sound effects | Ring, lose rings, jump, checkpoint, emerald: mono 22 kHz PCM. |
 | Light | Stronger sun, lower ambient than the PC: the GX renderer has diffuse light only. |
 | UI | NOT YET. One line of text: fps, pieces shown, rings against the quota. |
 | Bomb | A PLACEHOLDER sphere: the PC's is 4,000 triangles. |
 | Other palettes, marathon | Not yet. |
+
+## Running it in Dolphin
+
+**Use DSP LLE for this game** (Dolphin's `GameSettings/GOCT01.ini`: `[Core]` `DSPHLE = False`).
+With DSP HLE the game freezes about 25 seconds in: the CPU ends up spinning in libogc's DSP
+interrupt handler (`__dsp_def_taskcb`, waiting for mail that Dolphin's high-level emulation of
+the libasnd mixer never sends) once music is playing while the disc is read from a second
+thread. LLE, which is how a real console behaves, runs it without trouble. It took a debugger
+on the frozen game to find; the symptom looks like anything but audio.
 
 ## Controls
 

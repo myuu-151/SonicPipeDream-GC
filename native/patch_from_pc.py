@@ -89,8 +89,10 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     self.fpsTime, self.fpsFrames = self.fpsTime + deltaTime, self.fpsFrames + 1
     if (self.fpsTime >= 0.5) then
         local round = self.data.sections[math.min(self.section, #self.data.sections)]
-        self.readout:SetText(string.format("%.1f fps   %d pieces   RINGS %d / %d", self.fpsFrames / self.fpsTime,
-                                           self.piecesShown, self.rings, round.quota))
+        -- free memory, in KB: THE number on a 24 MB machine. (0 where the engine cannot tell.)
+        local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or 0
+        self.readout:SetText(string.format("%.1f fps  %d pieces  RINGS %d/%d  free %d KB", self.fpsFrames / self.fpsTime,
+                                           self.piecesShown, self.rings, round.quota, free))
         self.fpsTime, self.fpsFrames = 0.0, 0
     end
 """),
@@ -117,18 +119,106 @@ end
 # Scripts that are the PC's with a change or two (or none).
 OTHERS = {
     "SpecialStageMusic.lua": [],
-    # The PC's sky with half the frames (export_assets_gc.py's SKY_EVERY keeps every
-    # second), so stepped through at half the rate to run at the same speed; and brought
-    # in from the disc two a tick, not eight.
-    # The rate is scaled WHERE IT IS USED, not where it is set: medleyFramesPerSecond is a
-    # property, the scene file stores the PC's 14, and a stored property beats the default in
-    # Create(). Changing the default did nothing and the sky ran at double speed.
+    # THE SKY IS STREAMED. The PC loads all 384 frames of its show and keeps them: 25 MB cooked,
+    # more than this machine has. Holding fewer, smaller frames was tried both ways and looked
+    # bad both ways (half size is blurry; a quarter of the frames does not read as motion; and
+    # anything past about 4 MB crashed). So here a frame is in memory only around the moment it
+    # is shown: the next few are asked for IN THE BACKGROUND (AsyncLoadAsset), each is shown
+    # when it has arrived, and the ones gone by are unloaded. About half a megabyte at any time,
+    # whatever the size and number of frames -- which is what lets them be the PC's own.
+    # MEDLEY_EVERY must match SKY_EVERY in export_assets_gc.py. The rate is scaled where it is
+    # USED: medleyFramesPerSecond is a property, the scene file stores the PC's 14, and a stored
+    # property beats a default set in Create().
     "Sky.lua": [
-        ("local MEDLEY_FRAMES = 384\n", "local MEDLEY_FRAMES = 192\nlocal MEDLEY_KEEP = 0.5       -- one frame in two of the PC's show is here\n"),
-        ("local MEDLEY_LOADS_PER_TICK = 8\n", "local MEDLEY_LOADS_PER_TICK = 2\n"),
-        ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),
-        ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),
-        ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),
+        ("local MEDLEY_FRAMES = 384\n",
+         "local MEDLEY_EVERY = 1         -- every Nth frame of the PC's show is on the disc\n"
+         "local MEDLEY_FRAMES = 384 // MEDLEY_EVERY\n"
+         "local MEDLEY_AHEAD = 6         -- frames asked for ahead of the one on show\n"),
+        ("""        local now = math.floor(self.medleyTime * self.medleyFramesPerSecond) % MEDLEY_FRAMES
+        self.diamondFrames[1] = first
+        self.medleyLoaded = 1
+        self.medleyCursor = now
+""", """        self.window = {}                -- frame number -> the asset asked for (it may not be here yet)
+"""),
+        ("""        -- Bring in a few more frames, working forward from the cursor and round.
+        local budget = MEDLEY_LOADS_PER_TICK
+        while (budget > 0 and self.medleyLoaded < MEDLEY_FRAMES) do
+            local i = (self.medleyCursor % MEDLEY_FRAMES) + 1
+            if (self.diamondFrames[i] == nil) then
+                self.diamondFrames[i] = LoadAsset(MedleyName(self.shownSky, i))
+                self.medleyLoaded = self.medleyLoaded + 1
+                budget = budget - 1
+            end
+            self.medleyCursor = self.medleyCursor + 1
+        end
+
+        -- Its own clock, which only runs while the next frame is in memory:
+        -- playback can catch the loader up, and waiting a tick is better than
+        -- skipping ahead and showing a gap.
+        local nextTime = self.medleyTime + deltaTime
+        local nextFrame = math.floor(nextTime * self.medleyFramesPerSecond) % MEDLEY_FRAMES
+        if (self.diamondFrames[nextFrame + 1] ~= nil) then
+            self.medleyTime = nextTime
+        end
+        dframe = math.floor(self.medleyTime * self.medleyFramesPerSecond) % MEDLEY_FRAMES
+""", """        local fps = self.medleyFramesPerSecond / MEDLEY_EVERY
+        local cur = math.floor(self.medleyTime * fps) % MEDLEY_FRAMES
+
+        -- Ask, in the background, for the frames coming up.
+        for k = 0, MEDLEY_AHEAD do
+            local i = (cur + k) % MEDLEY_FRAMES + 1
+            if (self.window[i] == nil) then
+                self.window[i] = { asked = AsyncLoadAsset(MedleyName(self.shownSky, i)) }
+            end
+        end
+
+        -- A frame that has arrived. What AsyncLoadAsset hands back is a bare asset, which
+        -- SetTexture will not take ("Expected Texture"); once it is in memory, LoadAsset gives
+        -- the same frame as a texture, at once.
+        local function Arrived(i)
+            local w = self.window[i]
+            if (w == nil) then return nil end
+            if (w.tex == nil and w.asked:IsLoaded()) then
+                w.tex = LoadAsset(MedleyName(self.shownSky, i))
+            end
+            return w.tex
+        end
+
+        -- Let go of the ones gone by: all but the frame on show and the one before it, which
+        -- the material may still be drawing with. LETTING GO IS NOT FREEING. The engine frees a
+        -- frame when nothing refers to it, and these tables' entries go on referring to it until
+        -- Lua's collector has been round: asking the engine to unload one straight away is
+        -- refused ("still has 1 refs"), every frame stays, and the memory runs out. So: drop
+        -- them, and every few, run the collector and then have the engine sweep what is unheld.
+        for i, _ in pairs(self.window) do
+            local behind = (cur + 1 - i) % MEDLEY_FRAMES
+            if (behind > 1 and behind < MEDLEY_FRAMES - MEDLEY_AHEAD - 1) then
+                self.window[i] = nil
+                self.dropped = (self.dropped or 0) + 1
+            end
+        end
+        if ((self.dropped or 0) >= 4) then
+            self.dropped = 0
+            collectgarbage()
+            RefSweep()
+        end
+
+        -- Its own clock, which only runs while the next frame has arrived: the show waits for
+        -- the disc rather than skipping ahead and showing a gap.
+        local nextTime = self.medleyTime + deltaTime
+        local nextFrame = math.floor(nextTime * fps) % MEDLEY_FRAMES
+        if (Arrived(nextFrame + 1) ~= nil) then
+            self.medleyTime = nextTime
+        end
+        dframe = math.floor(self.medleyTime * fps) % MEDLEY_FRAMES
+        self.medleyShown = Arrived(dframe + 1)
+"""),
+        ("""        local dtex = self.diamondFrames[dframe + 1]
+        if (dtex ~= nil) then
+""", """        local dtex = self.diamondFrames[dframe + 1]
+        if (self.medley) then dtex = self.medleyShown end
+        if (dtex ~= nil) then
+"""),
     ],
 }
 

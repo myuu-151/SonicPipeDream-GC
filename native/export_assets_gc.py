@@ -116,12 +116,12 @@ def sonic():
     print("Sonic: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
 
 
-SKY_EVERY = 2                       # keep every Nth frame of the PC's 384: 192 frames. Sky.lua is told the same
-SKY_SHRINK = 2                      # and halve them: 256 x 128. Cooked, a frame is 16 KB, so 3 MB in all.
-# TRIED AND REJECTED (2026-09-21): every fourth frame at the full 512 x 256. Sharper, but 96 frames
-# is too few to read as motion, and its 6 MB crashed the console: the sky has about 3 MB to live
-# in. The size must be a power of two (the texture repeats, and GX only repeats those), so there
-# is no in-between size to try. Sharper than this means NOT HOLDING EVERY FRAME IN MEMORY.
+SKY_EVERY = 1                       # keep every Nth frame of the PC's 384. Sky.lua's MEDLEY_EVERY must say the same
+SKY_SHRINK = 1                      # and divide their size by this. 1 and 1: the PC's show exactly, 25 MB cooked.
+# That is far more than fits in memory, and it does not have to: the GameCube Sky.lua STREAMS the
+# frames (see patch_from_pc.py), holding half a megabyte of them at a time. Before that, the sky
+# had to live in about 3 MB whole: half size was blurry, a quarter of the frames did not read as
+# motion, and 6 MB crashed. If the disc cannot keep up on hardware, raise SKY_EVERY first.
 
 
 def sky():

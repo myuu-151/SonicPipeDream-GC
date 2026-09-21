@@ -28,11 +28,12 @@ local CLUSTER_FRAMES = 8
 -- Keep in step with SKIES in native/gen_sky_variants.py.
 local SKY_NAMES = { "Midnight", "Dawn", "Pastel", "Sunset", "Aurora", "Inferno", "Noir" }
 
-local MEDLEY_FRAMES = 192
-local MEDLEY_KEEP = 0.5       -- one frame in two of the PC's show is here
+local MEDLEY_EVERY = 1         -- every Nth frame of the PC's show is on the disc
+local MEDLEY_FRAMES = 384 // MEDLEY_EVERY
+local MEDLEY_AHEAD = 6         -- frames asked for ahead of the one on show
 -- Loading every medley frame in one go stalls the scene for seconds, so they
 -- come in a few per tick, in the order they will be shown.
-local MEDLEY_LOADS_PER_TICK = 2
+local MEDLEY_LOADS_PER_TICK = 8
 
 -- Asset names for a sky. The classic one keeps its original names.
 local function StarName(sky, i)
@@ -107,10 +108,7 @@ function Sky:LoadSky(sky)
     if (self.medley) then
         -- Load outward from wherever the show has got to, not from frame 1, so a
         -- change of sky shows its colours on the very next tick.
-        local now = math.floor(self.medleyTime * self.medleyFramesPerSecond * MEDLEY_KEEP) % MEDLEY_FRAMES
-        self.diamondFrames[1] = first
-        self.medleyLoaded = 1
-        self.medleyCursor = now
+        self.window = {}                -- frame number -> the asset asked for (it may not be here yet)
     else
         for i = 1, CLUSTER_FRAMES do
             self.diamondFrames[i] = LoadAsset("T_S2Sky_Diamonds_" .. i)
@@ -156,33 +154,64 @@ function Sky:UpdateSky(deltaTime)
 
     local dframe
     if (self.medley) then
-        -- Bring in a few more frames, working forward from the cursor and round.
-        local budget = MEDLEY_LOADS_PER_TICK
-        while (budget > 0 and self.medleyLoaded < MEDLEY_FRAMES) do
-            local i = (self.medleyCursor % MEDLEY_FRAMES) + 1
-            if (self.diamondFrames[i] == nil) then
-                self.diamondFrames[i] = LoadAsset(MedleyName(self.shownSky, i))
-                self.medleyLoaded = self.medleyLoaded + 1
-                budget = budget - 1
+        local fps = self.medleyFramesPerSecond / MEDLEY_EVERY
+        local cur = math.floor(self.medleyTime * fps) % MEDLEY_FRAMES
+
+        -- Ask, in the background, for the frames coming up.
+        for k = 0, MEDLEY_AHEAD do
+            local i = (cur + k) % MEDLEY_FRAMES + 1
+            if (self.window[i] == nil) then
+                self.window[i] = { asked = AsyncLoadAsset(MedleyName(self.shownSky, i)) }
             end
-            self.medleyCursor = self.medleyCursor + 1
         end
 
-        -- Its own clock, which only runs while the next frame is in memory:
-        -- playback can catch the loader up, and waiting a tick is better than
-        -- skipping ahead and showing a gap.
+        -- A frame that has arrived. What AsyncLoadAsset hands back is a bare asset, which
+        -- SetTexture will not take ("Expected Texture"); once it is in memory, LoadAsset gives
+        -- the same frame as a texture, at once.
+        local function Arrived(i)
+            local w = self.window[i]
+            if (w == nil) then return nil end
+            if (w.tex == nil and w.asked:IsLoaded()) then
+                w.tex = LoadAsset(MedleyName(self.shownSky, i))
+            end
+            return w.tex
+        end
+
+        -- Let go of the ones gone by: all but the frame on show and the one before it, which
+        -- the material may still be drawing with. LETTING GO IS NOT FREEING. The engine frees a
+        -- frame when nothing refers to it, and these tables' entries go on referring to it until
+        -- Lua's collector has been round: asking the engine to unload one straight away is
+        -- refused ("still has 1 refs"), every frame stays, and the memory runs out. So: drop
+        -- them, and every few, run the collector and then have the engine sweep what is unheld.
+        for i, _ in pairs(self.window) do
+            local behind = (cur + 1 - i) % MEDLEY_FRAMES
+            if (behind > 1 and behind < MEDLEY_FRAMES - MEDLEY_AHEAD - 1) then
+                self.window[i] = nil
+                self.dropped = (self.dropped or 0) + 1
+            end
+        end
+        if ((self.dropped or 0) >= 4) then
+            self.dropped = 0
+            collectgarbage()
+            RefSweep()
+        end
+
+        -- Its own clock, which only runs while the next frame has arrived: the show waits for
+        -- the disc rather than skipping ahead and showing a gap.
         local nextTime = self.medleyTime + deltaTime
-        local nextFrame = math.floor(nextTime * self.medleyFramesPerSecond * MEDLEY_KEEP) % MEDLEY_FRAMES
-        if (self.diamondFrames[nextFrame + 1] ~= nil) then
+        local nextFrame = math.floor(nextTime * fps) % MEDLEY_FRAMES
+        if (Arrived(nextFrame + 1) ~= nil) then
             self.medleyTime = nextTime
         end
-        dframe = math.floor(self.medleyTime * self.medleyFramesPerSecond * MEDLEY_KEEP) % MEDLEY_FRAMES
+        dframe = math.floor(self.medleyTime * fps) % MEDLEY_FRAMES
+        self.medleyShown = Arrived(dframe + 1)
     else
         dframe = math.floor(self.time * self.colourShiftsPerSecond) % CLUSTER_FRAMES
     end
 
     if (dframe ~= self.diamondFrame) then
         local dtex = self.diamondFrames[dframe + 1]
+        if (self.medley) then dtex = self.medleyShown end
         if (dtex ~= nil) then
             self.diamondFrame = dframe
             self.skyMat:SetTexture(DIAMOND_SLOT, dtex)
