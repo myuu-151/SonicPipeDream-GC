@@ -212,8 +212,8 @@ function SpecialStage:Build()
     sun:SetName("StageSun")
     sun:SetDirection(Vec(0.35, -1.0, -0.25))
     sun:SetColor(Vec(1.0, 0.98, 0.94, 1.0))
-    sun:SetIntensity(0.45)
-    world:SetAmbientLightColor(Vec(0.62, 0.62, 0.66, 1.0))
+    sun:SetIntensity(0.95)
+    world:SetAmbientLightColor(Vec(0.40, 0.40, 0.46, 1.0))
 
     -- every ring and bomb in one list, in the order they are met
     self.objects = {}
@@ -277,8 +277,8 @@ function SpecialStage:Build()
     end
     self.camera:SetFar(1200.0)
 
-    -- THE FIRST TEST: no UI art, no font, no music. One line of text with what the test is for:
-    -- the frame rate, and how much track is being drawn.
+    -- No UI art or font yet. One line of text: the frame rate, how much track is being drawn,
+    -- and the rings against what the round asks for.
     local ui = world:SpawnNode("Canvas")
     ui:SetAnchorMode(AnchorMode.TopLeft)
     ui:SetPosition(0.0, 0.0)
@@ -290,6 +290,11 @@ function SpecialStage:Build()
     self.readout:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
     self.readout:SetText("...")
     self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
+
+    -- the music: its script only needs to be on some node, and nothing in the scene has it
+    local music = world:SpawnNode("Node3D")
+    music:SetName("SpecialStageMusic")
+    music:SetScript("SpecialStageMusic")
 
     -- the sky that goes with this stage's colours (stage_palettes.py's SKY). Sky.lua picks
     -- up a change of `sky` on its next tick.
@@ -538,8 +543,9 @@ function SpecialStage:Tick(deltaTime)
     self:UpdatePieces()
     self.fpsTime, self.fpsFrames = self.fpsTime + deltaTime, self.fpsFrames + 1
     if (self.fpsTime >= 0.5) then
-        self.readout:SetText(string.format("%.1f fps   %d pieces   %d objects", self.fpsFrames / self.fpsTime,
-                                           self.piecesShown, self.objectsShown or 0))
+        local round = self.data.sections[math.min(self.section, #self.data.sections)]
+        self.readout:SetText(string.format("%.1f fps   %d pieces   RINGS %d / %d", self.fpsFrames / self.fpsTime,
+                                           self.piecesShown, self.rings, round.quota))
         self.fpsTime, self.fpsFrames = 0.0, 0
     end
     self:Collide(before)

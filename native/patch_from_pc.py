@@ -43,16 +43,11 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     ("            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name }\n",
      "            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name,\n"
      "                                                      first = piece.first_frame, last = piece.last_frame }\n"),
-    # -- no UI art, font or music in the first test: an FPS readout instead
+    # -- no UI art or font yet: one line of text instead. The music is the PC's, as it is.
     ("""    local ui = world:SpawnNode("Canvas")
     ui:SetScript("SpecialStageUI")
-
-    -- the music: its script only needs to be on some node, and nothing in the scene has it
-    local music = world:SpawnNode("Node3D")
-    music:SetName("SpecialStageMusic")
-    music:SetScript("SpecialStageMusic")
-""", """    -- THE FIRST TEST: no UI art, no font, no music. One line of text with what the test is for:
-    -- the frame rate, and how much track is being drawn.
+""", """    -- No UI art or font yet. One line of text: the frame rate, how much track is being drawn,
+    -- and the rings against what the round asks for.
     local ui = world:SpawnNode("Canvas")
     ui:SetAnchorMode(AnchorMode.TopLeft)
     ui:SetPosition(0.0, 0.0)
@@ -65,6 +60,14 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     self.readout:SetText("...")
     self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
 """),
+    # -- the light. The GameCube renderer has DIFFUSE light only: no specular, no fresnel. On the PC
+    # the arch spheres and Sonic get their shape from a gentle sun plus a highlight; with the
+    # highlight gone that gentle sun leaves them flat. So the sun is stronger here and the ambient
+    # lower, and the shape comes from the diffuse falloff alone. (The pipe is unlit on both: its
+    # shading is baked into its vertices, so none of this touches it.)
+    ("    sun:SetIntensity(0.45)\n", "    sun:SetIntensity(0.95)\n"),
+    ("    world:SetAmbientLightColor(Vec(0.62, 0.62, 0.66, 1.0))\n",
+     "    world:SetAmbientLightColor(Vec(0.40, 0.40, 0.46, 1.0))\n"),
     # -- a pad
     ("""        if (Input.IsKeyDown(Key.A)) then want = want + 1.0 end
         if (Input.IsKeyDown(Key.D)) then want = want - 1.0 end
@@ -85,8 +88,9 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     self:UpdatePieces()
     self.fpsTime, self.fpsFrames = self.fpsTime + deltaTime, self.fpsFrames + 1
     if (self.fpsTime >= 0.5) then
-        self.readout:SetText(string.format("%.1f fps   %d pieces   %d objects", self.fpsFrames / self.fpsTime,
-                                           self.piecesShown, self.objectsShown or 0))
+        local round = self.data.sections[math.min(self.section, #self.data.sections)]
+        self.readout:SetText(string.format("%.1f fps   %d pieces   RINGS %d / %d", self.fpsFrames / self.fpsTime,
+                                           self.piecesShown, self.rings, round.quota))
         self.fpsTime, self.fpsFrames = 0.0, 0
     end
 """),
@@ -110,7 +114,16 @@ end
 ]
 
 
+# Scripts that are the PC's unchanged. (The sky script works out for itself that it has been
+# given the 8-frame clusters sky and not the 384-frame medley.)
+COPIED = ["Sky.lua", "SpecialStageMusic.lua"]
+
+
 def main():
+    for name in COPIED:
+        text = open(os.path.join(os.path.dirname(SRC), name), encoding="utf-8", newline="").read().replace("\r\n", "\n")
+        open(os.path.join(os.path.dirname(OUT), name), "w", encoding="utf-8", newline="\n").write(
+            "-- COPIED from the PC repo by native/patch_from_pc.py. Change it there.\n" + text)
     s = open(SRC, encoding="utf-8", newline="").read().replace("\r\n", "\n")
     for n, (old, new) in enumerate(CHANGES):
         if old not in s:

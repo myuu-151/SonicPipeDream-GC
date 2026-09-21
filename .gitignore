@@ -6,3 +6,6 @@ proj/Build/
 proj/Saves/
 
 __pycache__/
+
+# Remade by native/export_assets_gc.py from the PC repo (17 MB each)
+proj/Assets/Sounds/SW_SpecialStage_*.oct
