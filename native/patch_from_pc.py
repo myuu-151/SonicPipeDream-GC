@@ -58,6 +58,17 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     self.readout:SetTextSize(14.0)
     self.readout:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
     self.readout:SetText("...")
+    -- where the frame went (System.GetPerfReport): the average, and the worst frame, in ms
+    self.perfLines = {}
+    for i = 1, 2 do
+        local line = debug:CreateChild("Text")
+        line:SetAnchorMode(AnchorMode.TopLeft)
+        line:SetPosition(28.0, 396.0 + 14.0 * i)
+        line:SetTextSize(12.0)
+        line:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
+        line:SetText("")
+        self.perfLines[i] = line
+    end
     self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
 """),
     # (The light is the PC's, untouched. It was stronger here for a while, to give the arch spheres
@@ -92,6 +103,11 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
         self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  free %d KB  %s",
                                            self.fpsFrames / self.fpsTime, math.floor(self.worstFrame * 1000.0 + 0.5),
                                            self.piecesShown, free, sd))
+        if (System.GetPerfReport ~= nil) then
+            local average, worst = System.GetPerfReport()
+            self.perfLines[1]:SetText(average)
+            self.perfLines[2]:SetText(worst)
+        end
         self.fpsTime, self.fpsFrames, self.worstFrame = 0.0, 0, 0.0
     end
 """),
