@@ -44,18 +44,27 @@ local REACH_ANGLE = 11.0        -- ...this far round it (256ths)...
 local REACH_HEIGHT = 2.6        -- ...and no higher off the surface than this
 local RING_SPIN_FRAMES = 12     -- meshes in half a turn of a ring (export_to_octave.py writes them)
 local RING_SPIN_FPS = 20.0      -- steps a second: a full turn to the eye every 0.6 s
+-- Sparkles where a ring was, and a fireball where a bomb was (native/gen_fx_assets.py). They are
+-- flat squares turned to face the camera, and they RIDE WITH SONIC: he runs at 30 units a second,
+-- so one left where the ring hung would be behind the camera before it had finished. Each is kept
+-- in track coordinates relative to him (frames ahead, angle, height) and placed afresh every tick.
+local SPARKLES = 5              -- to a ring
+local SPARKLE_LIFE = 0.45
+local SPARKLE_SIZE = 1.5
+local BOOM_LIFE = 0.30
+local BOOM_FRAMES = 3
+local BOOM_SIZE = 3.6
+
 -- Drop shadows: a dark blob on the pipe under Sonic and under every ring and bomb (SM_Shadow).
 local SHADOW_LIFT = 0.06        -- off the pipe's surface, or it fights the pipe for the same depth
 local SHADOW_RING = { along = 1.05, across = 1.05 }     -- round, like the others. (A thin ellipse is what a ring
                                                         -- really casts from above; round reads better.)
 local SHADOW_BOMB = { along = 1.35, across = 1.35 }
 local SHADOW_SONIC = 1.25
-local SHADOW_SHRINK = 0.10      -- how fast a shadow shrinks with the drop from the thing to the pipe under it
--- The drop at which a shadow steps down to the next, fainter disc (SM_Shadow, SM_Shadow_1..3);
--- past the last there is no shadow at all. A thing riding the pipe is about 2 off it.
-local SHADOW_STEPS = { 3.0, 6.0, 9.0, 12.0 }
-local SHADOW_RIM = 0.94         -- no shadow for a thing further out than this share of the pipe's radius:
-                                -- the track is a HALF pipe, and past its rim there is nothing to fall on
+local SHADOW_SHRINK = 0.10      -- how fast Sonic's shadow draws in as he jumps away from the pipe
+local SHADOW_RIM = 58.0         -- 256ths round from the floor's centre line: the pipe's surface ends at 57.7
+                                -- (81 degrees; measured off the mesh). The track is a HALF pipe, and a
+                                -- thing beyond its rim has nothing under it to cast a shadow on
 local BOMB_COST = 10            -- rings a bomb takes, as in the original
 local STUN = 0.6                -- seconds of stumbling after a bomb
 local PIECES_AHEAD, PIECES_BEHIND = 72, 12   -- frames of TRACK shown round the player. The PC shows all
@@ -273,11 +282,10 @@ function SpecialStage:Build()
     self.emerald:SetWorldRotationQuat(FacingQuat(emeraldFwd, emeraldUp))
 
     self.meshBall = LoadAsset("SM_PlayerBall")
+    self.meshSparkle, self.meshBoom = LoadAsset("SM_FxQuad"), LoadAsset("SM_FxQuadBoom")
+    self.boomMaterial, self.boomTextures, self.boomFrame = LoadAsset("M_Explosion"), {}, -1
+    for i = 0, BOOM_FRAMES - 1 do self.boomTextures[i] = LoadAsset("T_Explosion_" .. i) end
     self.meshShadow = LoadAsset("SM_Shadow")
-    self.meshShadows = { self.meshShadow }                          -- nearest and darkest first
-    for i = 1, #SHADOW_STEPS - 1 do
-        self.meshShadows[i + 1] = LoadAsset("SM_Shadow_" .. i) or self.meshShadows[i]
-    end
     if (self.meshShadow ~= nil) then
         self.playerShadow = SpawnMesh(world, self.meshShadow)
     end
@@ -297,16 +305,16 @@ function SpecialStage:Build()
     end
     self.camera:SetFar(1200.0)
 
-    -- No UI art or font yet. One line of text: the frame rate, how much track is being drawn,
-    -- and the rings against what the round asks for.
     local ui = world:SpawnNode("Canvas")
-    ui:SetAnchorMode(AnchorMode.TopLeft)
-    ui:SetPosition(0.0, 0.0)
-    ui:SetDimensions(640.0, 480.0)
-    self.readout = ui:CreateChild("Text")
+    ui:SetScript("SpecialStageUI")
+    local debug = world:SpawnNode("Canvas")
+    debug:SetAnchorMode(AnchorMode.TopLeft)
+    debug:SetPosition(0.0, 0.0)
+    debug:SetDimensions(640.0, 480.0)
+    self.readout = debug:CreateChild("Text")
     self.readout:SetAnchorMode(AnchorMode.TopLeft)
-    self.readout:SetPosition(24.0, 24.0)
-    self.readout:SetTextSize(22.0)
+    self.readout:SetPosition(28.0, 440.0)
+    self.readout:SetTextSize(14.0)
     self.readout:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
     self.readout:SetText("...")
     self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
@@ -347,6 +355,80 @@ function SpecialStage:Restart()
     self.runClock = 0.0
     self.emerald:SetVisible(true)
     self.uiReady = false
+    self.failed = false
+    self.fxPool = self.fxPool or { sparkle = {}, boom = {} }
+    for _, fx in ipairs(self.fx or {}) do                   -- whatever was mid-flight goes back to the pool
+        fx.node:SetVisible(false)
+        table.insert(self.fxPool[fx.kind], fx.node)
+    end
+    self.fx = {}
+end
+
+-- ------------------------------------------------------------------ effects
+function SpecialStage:FxNode(kind)
+    local node = table.remove(self.fxPool[kind])
+    if (node == nil) then
+        local mesh = (kind == "boom") and self.meshBoom or self.meshSparkle
+        if (mesh == nil) then return nil end
+        node = SpawnMesh(self:GetWorld(), mesh)
+    end
+    node:SetVisible(true)
+    return node
+end
+
+function SpecialStage:SpawnSparkles(o)
+    for i = 1, SPARKLES do
+        local node = self:FxNode("sparkle")
+        if (node == nil) then return end
+        local a = (i / SPARKLES) * TWO_PI + math.random() * 1.2
+        local push = 0.6 + math.random() * 0.8
+        self.fx[#self.fx + 1] = { kind = "sparkle", node = node, age = -0.05 * (i - 1), life = SPARKLE_LIFE,
+                                  ahead = o.frame - self.frame, angle = o.angle, height = self.data.hover,
+                                  dAngle = math.cos(a) * push * 14.0, dHeight = math.sin(a) * push * 2.4,
+                                  size = SPARKLE_SIZE * (0.7 + math.random() * 0.6) }
+    end
+end
+
+function SpecialStage:SpawnBoom(o)
+    local node = self:FxNode("boom")
+    if (node == nil) then return end
+    self.fx[#self.fx + 1] = { kind = "boom", node = node, age = 0.0, life = BOOM_LIFE,
+                              ahead = o.frame - self.frame, angle = o.angle, height = self.data.hover,
+                              dAngle = 0.0, dHeight = 1.5, size = BOOM_SIZE }
+end
+
+-- Move, size and face every live effect; retire the finished ones. `facing` is the camera's
+-- own rotation: a square given it faces the camera exactly.
+function SpecialStage:UpdateFx(dt, facing)
+    local keep = {}
+    for _, fx in ipairs(self.fx) do
+        fx.age = fx.age + dt
+        if (fx.age >= fx.life) then
+            fx.node:SetVisible(false)
+            table.insert(self.fxPool[fx.kind], fx.node)
+        else
+            local t = math.max(0.0, fx.age) / fx.life
+            local place = self:Place(self.frame + fx.ahead, fx.angle + fx.dAngle * t, fx.height + fx.dHeight * t)
+            local size
+            if (fx.kind == "boom") then
+                size = fx.size * (0.55 + 0.45 * t)
+                local frame = math.min(BOOM_FRAMES - 1, math.floor(t * BOOM_FRAMES))
+                if (frame ~= self.boomFrame and self.boomMaterial ~= nil and self.boomTextures[frame] ~= nil) then
+                    self.boomFrame = frame
+                    self.boomMaterial:SetTexture(1, self.boomTextures[frame])
+                end
+            else
+                -- a sparkle swells, twinkles and goes
+                size = fx.size * math.sin(math.pi * t) * (0.75 + 0.25 * math.sin(fx.age * 50.0))
+            end
+            fx.node:SetVisible(fx.age >= 0.0)
+            fx.node:SetWorldPosition(ToVec(place))
+            fx.node:SetWorldRotationQuat(facing)
+            fx.node:SetScale(Vec(size, size, size))
+            keep[#keep + 1] = fx
+        end
+    end
+    self.fx = keep
 end
 
 -- ------------------------------------------------------------------ rings and bombs
@@ -357,35 +439,24 @@ function SpecialStage:Release(o)
     o.node, o.shadow = nil, nil
 end
 
--- A shadow falls STRAIGHT DOWN (down being the track's own down: the pipe is shaded by a light
--- from right above, and the shadows agree with it). So it does not sit on the pipe behind the
--- thing -- for a ring high on the wall or overhead that spot is in mid air, the pipe being open
--- at the top, and the first version floated blobs there at odd angles -- but on the pipe BELOW
--- it: the point of the lower half with the same sideways offset. `height` is how far the thing
--- is off the surface. Returns false, and hides the shadow, when there is no pipe under it.
+-- A shadow lies ON THE PIPE UNDER THE THING, "under" meaning toward the pipe's surface: a ring up
+-- on the wall has its shadow on the wall beside it, as the original has. Seen from down the track
+-- a disc lying on the wall is a long slanted blob, and at the side a thin sliver, which is exactly
+-- what the original's shadow sprites are. It is dark wherever it is. (Two other ways were tried:
+-- dropped straight down to the floor, and fading with the drop. Neither is what the game does.)
+-- The track is a HALF pipe: past its rim there is no surface, and a shadow put there floats in
+-- mid air, so a thing beyond the rim casts none. `height` only matters for Sonic: his draws in
+-- as he jumps away from the pipe.
 function SpecialStage:PlaceShadow(shadow, frame, angle, height, along, across)
-    local radius = self.data.pipe_radius
-    local side = self.data.angle_00_side
-    local t = side * angle * TWO_PI / 256.0
-    local r = radius - height
-    local across_pipe = r * math.sin(t) / radius                -- sideways offset, as a share of the radius
-    if (math.abs(across_pipe) > SHADOW_RIM) then
+    local round = angle
+    if (round > 128.0) then round = round - 256.0 end
+    if (round < -128.0) then round = round + 256.0 end
+    if (math.abs(round) > SHADOW_RIM) then
         shadow:SetVisible(false)
         return false
     end
-    local below = math.asin(across_pipe)                        -- the angle of the pipe under it
-    local drop = (radius - r * math.cos(t)) - (radius - radius * math.cos(below))
-    local level = nil
-    for i, limit in ipairs(SHADOW_STEPS) do
-        if (drop <= limit) then level = i break end
-    end
-    if (level == nil or self.meshShadows[level] == nil) then        -- too far up to cast anything worth seeing
-        shadow:SetVisible(false)
-        return false
-    end
-    shadow:SetStaticMesh(self.meshShadows[level])
-    local shrink = 1.0 / (1.0 + math.max(0.0, drop) * SHADOW_SHRINK)
-    local place, fwd, inward = self:Place(frame, below * 256.0 / TWO_PI * side, SHADOW_LIFT)
+    local shrink = 1.0 / (1.0 + math.max(0.0, height) * SHADOW_SHRINK)
+    local place, fwd, inward = self:Place(frame, angle, SHADOW_LIFT)
     shadow:SetWorldPosition(ToVec(place))
     shadow:SetWorldRotationQuat(FacingQuat(fwd, inward))
     shadow:SetScale(Vec(along * shrink, 1.0, across * shrink))
@@ -417,7 +488,7 @@ function SpecialStage:Acquire(o)
     o.shadow = shadow
     if (shadow ~= nil) then
         local size = o.bomb and SHADOW_BOMB or SHADOW_RING
-        self:PlaceShadow(shadow, o.frame, o.angle, self.data.hover, size.along, size.across)
+        self:PlaceShadow(shadow, o.frame, o.angle, 0.0, size.along, size.across)
     end
 end
 
@@ -463,12 +534,16 @@ function SpecialStage:Collide(fromFrame)
             o.taken = true
             if (o.node ~= nil) then self:Release(o) end
             if (o.bomb) then
+                local had = self.rings
                 self.rings = math.max(0, self.rings - BOMB_COST)
                 self.stun = STUN
-                self:Sound("LoseRings")
+                self:Sound("Explosion")
+                if (had > 0) then self:Sound("LoseRings") end      -- only if there were any to lose
+                self:SpawnBoom(o)
             else
                 self.rings = self.rings + 1
                 self:Sound("Ring")
+                self:SpawnSparkles(o)
             end
         end
     end
@@ -492,7 +567,9 @@ function SpecialStage:PassChecks(fromFrame)
         self.section = self.section + 1
     else
         self.over = 3.5
-        if (self.uiReady) then TheSpecialStageUI:ShowBanner("NOT ENOUGH RINGS", 3.2) end
+        self.failed = true
+        self:Sound("Fail")
+        if (self.uiReady) then TheSpecialStageUI:ShowTooBad() end
     end
 end
 
@@ -516,7 +593,8 @@ end
 -- music (rms 0.34 against 0.16) and it is the one sound that plays in bursts, several a second,
 -- each on top of the last. So every effect has its own level here, set against the music at 1.0:
 -- the ring well under it, the one-off fanfares about level with it.
-local MIX = { Ring = 0.22, LoseRings = 0.55, Jump = 0.40, Checkpoint = 0.65, GetEmerald = 1.0 }
+local MIX = { Ring = 0.22, LoseRings = 0.55, Jump = 0.40, Checkpoint = 0.65, GetEmerald = 1.0,
+              Explosion = 0.60, Fail = 0.70, ExitStage = 0.60 }
 
 function SpecialStage:Sound(name)
     self.sounds = self.sounds or {}
@@ -559,7 +637,10 @@ function SpecialStage:Tick(deltaTime)
     end
     if (self.over >= 0.0) then
         self.over = self.over - dt
-        if (self.over < 0.0) then self:Restart() end
+        if (self.over < 0.0) then
+            if (self.failed) then self:Sound("ExitStage") end
+            self:Restart()
+        end
     end
 
     -- steering: round the pipe, and only round it
@@ -614,9 +695,9 @@ function SpecialStage:Tick(deltaTime)
         local round = self.data.sections[math.min(self.section, #self.data.sections)]
         -- free memory, in KB: THE number on a 24 MB machine. (0 where the engine cannot tell.)
         local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or 0
-        self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  RINGS %d/%d  free %d KB",
+        self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  free %d KB",
                                            self.fpsFrames / self.fpsTime, math.floor(self.worstFrame * 1000.0 + 0.5),
-                                           self.piecesShown, self.rings, round.quota, free))
+                                           self.piecesShown, free))
         self.fpsTime, self.fpsFrames, self.worstFrame = 0.0, 0, 0.0
     end
     self:Collide(before)
@@ -692,7 +773,19 @@ function SpecialStage:Tick(deltaTime)
     local look = Normalize(Add(target, Scale(eye, -1.0)))
     local camUp = Normalize(Add(Scale(upHere, 1.0 - swing), Scale(inward, swing)))
     self.camera:SetWorldPosition(ToVec(eye))
-    self.camera:SetWorldRotationQuat(CameraQuat(look, camUp))
+    local facing = CameraQuat(look, camUp)
+    self.camera:SetWorldRotationQuat(facing)
+    -- For looking at the effects without having to steer into anything: S2_TEST_FX sets one of
+    -- each off in front of Sonic every second.
+    if (os ~= nil and os.getenv ~= nil and os.getenv("S2_TEST_FX") ~= nil) then
+        self.testFx = (self.testFx or 0.0) + dt
+        if (self.testFx >= 1.0) then
+            self.testFx = 0.0
+            self:SpawnSparkles({ frame = self.frame + 5.0, angle = -14.0 })
+            self:SpawnBoom({ frame = self.frame + 6.0, angle = 14.0 })
+        end
+    end
+    self:UpdateFx(dt, facing)
 
     -- the rings spin: every ring in sight steps to the next mesh of the turn, all together
     self.clock = (self.clock or 0.0) + dt

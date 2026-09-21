@@ -54,8 +54,9 @@ nothing about the console's fill rate or triangle budget.
 | Music | The PC's two tracks, mono 32 kHz Vorbis, streamed from the disc by the engine. |
 | Sound effects | Ring, lose rings, jump, checkpoint, emerald: mono 22 kHz PCM. |
 | Light | Stronger sun, lower ambient than the PC: the GX renderer has diffuse light only. |
-| UI | NOT YET. One line of text: fps, pieces shown, rings against the quota. |
-| Bomb | A PLACEHOLDER sphere: the PC's is 4,000 triangles. |
+| HUD | The PC's, whole: SONIC / RINGS, the TOTAL box, START dropping in and scattering, COOL ! and TOO BAD ! with the emblem and glove, in the Sonic font. The art goes in at the size it was drawn (the PC scales it up 4x) and cooks to about 430 KB; the font draws only the glyphs the game prints. Kept 4% clear of the screen's edges for a TV's overscan. One small debug line at the bottom: fps, worst frame, pieces drawn, free memory. |
+| Rings, bombs | The PC's own meshes. The bomb is LIT for real (a swatch texture, no vertex colours): a lit material on a vertex-coloured mesh renders unlit on GX. |
+| Effects | Ring sparkles, the bomb's explosion, drop shadows: the PC's. |
 | Other palettes, marathon | Not yet. |
 
 ## Running it in Dolphin

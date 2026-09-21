@@ -41,7 +41,9 @@ MUSIC = [("ss_intro.wav", "SW_SpecialStage_Intro", 0x51C0FFEE00300001),
          ("ss_loop.wav", "SW_SpecialStage_Loop", 0x51C0FFEE00300002)]
 EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_LoseRings", 0x51C0FFEE00300011),
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
-           ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014)]
+           ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),
+           ("Fail.wav", "SW_Fail", 0x51C0FFEE00300019), ("Explosion2.wav", "SW_Explosion", 0x51C0FFEE0030001A),
+           ("Exit_SS.wav", "SW_ExitStage", 0x51C0FFEE0030001B)]
 NORMALISE = {"SW_GetEmerald": 0.97}         # as the PC does: that file is quiet
 
 
@@ -182,7 +184,44 @@ def sky():
     print("sky: %d frames at %d x %d" % (medley.FRAMES, medley.TEX_W, medley.TEX_H))
 
 
+def hud():
+    """THE HUD, all of it: the PC's art, font and effects, made by the PC's own scripts.
+
+    What differs is size. The PC scales its pixel art up four times and keeps it uncompressed
+    (4.5 MB of textures and a 2 MB font atlas); this machine has about 1.8 MB to spare. So the art
+    goes in at the size it was drawn, and NOT flagged to stay uncompressed: the engine's cook then
+    stores anything with soft alpha as RGB5A3, 16 bits a texel with 3 of alpha, which keeps the
+    soft edges CMPR's single bit would chew. The font's atlas is always uncompressed, so it is
+    made small instead: the glyphs the game actually prints, at half the size."""
+    sys.path.insert(0, os.path.join(PC, "native"))
+    import gen_ui_assets as pc_ui
+    import gen_ui_font as pc_font
+    import gen_fx_assets as pc_fx
+
+    pc_ui.TEX = os.path.join(PROJ, "Assets", "Textures", "UI")
+    pc_ui.SCALE_ART, pc_ui.FORCE_HQ = False, False
+    pc_ui.main()
+
+    pc_font.OUT = os.path.join(PROJ, "Assets", "Textures", "UI", "F_SonicUI.oct")
+    pc_font.LOOK = os.path.join(HERE, "..", "F_SonicUI_atlas_gc.png")
+    pc_font.SIZE = 30
+    pc_font.ATLAS_W, pc_font.ATLAS_H = 256, 256
+    pc_font.OUTLINE, pc_font.SHADOW = 1, (2, 2)
+    pc_font.PAD = pc_font.OUTLINE + 2
+    pc_font.ONLY = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!"     # numbers, COOL !, TOO BAD !, the banners
+    pc_font.main()
+    os.remove(pc_font.LOOK)
+
+    pc_fx.OUT = os.path.join(PROJ, "Assets", "Stage", "FX")
+    pc_fx.LOOK = os.path.join(PROJ, "Assets", "Stage", "FX")        # its look-at PNGs: removed again below
+    pc_fx.main()
+    for name in os.listdir(pc_fx.OUT):
+        if name.endswith(".png"):
+            os.remove(os.path.join(pc_fx.OUT, name))
+
+
 if __name__ == "__main__":
     sonic()
     sounds()
+    hud()
     sky()

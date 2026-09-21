@@ -41,19 +41,21 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     ("            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name }\n",
      "            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name,\n"
      "                                                      first = piece.first_frame, last = piece.last_frame }\n"),
-    # -- no UI art or font yet: one line of text instead. The music is the PC's, as it is.
+    # -- the HUD is the PC's (SpecialStageUI.lua, copied below). Beside it, one small line of text at
+    # the BOTTOM of the screen for the numbers a console build lives by: frame rate, the worst
+    # frame of the last half second, how much track is drawn, and free memory.
     ("""    local ui = world:SpawnNode("Canvas")
     ui:SetScript("SpecialStageUI")
-""", """    -- No UI art or font yet. One line of text: the frame rate, how much track is being drawn,
-    -- and the rings against what the round asks for.
-    local ui = world:SpawnNode("Canvas")
-    ui:SetAnchorMode(AnchorMode.TopLeft)
-    ui:SetPosition(0.0, 0.0)
-    ui:SetDimensions(640.0, 480.0)
-    self.readout = ui:CreateChild("Text")
+""", """    local ui = world:SpawnNode("Canvas")
+    ui:SetScript("SpecialStageUI")
+    local debug = world:SpawnNode("Canvas")
+    debug:SetAnchorMode(AnchorMode.TopLeft)
+    debug:SetPosition(0.0, 0.0)
+    debug:SetDimensions(640.0, 480.0)
+    self.readout = debug:CreateChild("Text")
     self.readout:SetAnchorMode(AnchorMode.TopLeft)
-    self.readout:SetPosition(24.0, 24.0)
-    self.readout:SetTextSize(22.0)
+    self.readout:SetPosition(28.0, 440.0)
+    self.readout:SetTextSize(14.0)
     self.readout:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
     self.readout:SetText("...")
     self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
@@ -85,9 +87,9 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
         local round = self.data.sections[math.min(self.section, #self.data.sections)]
         -- free memory, in KB: THE number on a 24 MB machine. (0 where the engine cannot tell.)
         local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or 0
-        self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  RINGS %d/%d  free %d KB",
+        self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  free %d KB",
                                            self.fpsFrames / self.fpsTime, math.floor(self.worstFrame * 1000.0 + 0.5),
-                                           self.piecesShown, self.rings, round.quota, free))
+                                           self.piecesShown, free))
         self.fpsTime, self.fpsFrames, self.worstFrame = 0.0, 0, 0.0
     end
 """),
@@ -114,6 +116,9 @@ end
 # Scripts that are the PC's with a change or two (or none).
 OTHERS = {
     "SpecialStageMusic.lua": [],
+    # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
+    # clear of the edges.
+    "SpecialStageUI.lua": [("local SAFE_MARGIN = 0.0\n", "local SAFE_MARGIN = 0.04\n")],
     # THE SKY IS STREAMED. The PC loads all 384 frames of its show and keeps them: 25 MB cooked,
     # more than this machine has. Holding fewer, smaller frames was tried both ways and looked
     # bad both ways (half size is blurry; a quarter of the frames does not read as motion; and
