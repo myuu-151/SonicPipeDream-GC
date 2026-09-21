@@ -130,10 +130,16 @@ OTHERS = {
     # USED: medleyFramesPerSecond is a property, the scene file stores the PC's 14, and a stored
     # property beats a default set in Create().
     "Sky.lua": [
+        # The stars are the biggest thing HELD in memory: 8 frames of 1024 x 1024, 4 MB cooked. Four
+        # of them, stepped at half the rate, twinkle the same and give 2 MB back -- which this build
+        # needs, because a read that cannot get its buffer comes back EMPTY (see below).
+        ("local STAR_FRAMES = 8\n", "local STAR_FRAMES = 4\n"),
+        ("math.floor(self.time * self.twinklesPerSecond) % STAR_FRAMES",
+         "math.floor(self.time * self.twinklesPerSecond * 0.5) % STAR_FRAMES"),
         ("local MEDLEY_FRAMES = 384\n",
          "local MEDLEY_EVERY = 1         -- every Nth frame of the PC's show is on the disc\n"
          "local MEDLEY_FRAMES = 384 // MEDLEY_EVERY\n"
-         "local MEDLEY_AHEAD = 6         -- frames asked for ahead of the one on show\n"),
+         "local MEDLEY_AHEAD = 4         -- frames asked for ahead of the one on show\n"),
         ("""        local now = math.floor(self.medleyTime * self.medleyFramesPerSecond) % MEDLEY_FRAMES
         self.diamondFrames[1] = first
         self.medleyLoaded = 1
@@ -209,6 +215,18 @@ OTHERS = {
         local nextFrame = math.floor(nextTime * fps) % MEDLEY_FRAMES
         if (Arrived(nextFrame + 1) ~= nil) then
             self.medleyTime = nextTime
+            self.waited = 0.0
+        else
+            -- A frame that NEVER comes: its read failed (the engine leaves such an asset unloaded,
+            -- where it used to crash). Waiting for it would stop the sky for good, so after a
+            -- moment it is skipped -- the picture holds for one frame -- and forgotten, so that it
+            -- is asked for afresh the next time round.
+            self.waited = (self.waited or 0.0) + deltaTime
+            if (self.waited > 0.4) then
+                self.window[nextFrame + 1] = nil
+                self.medleyTime = nextTime
+                self.waited = 0.0
+            end
         end
         dframe = math.floor(self.medleyTime * fps) % MEDLEY_FRAMES
         self.medleyShown = Arrived(dframe + 1)

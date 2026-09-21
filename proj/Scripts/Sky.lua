@@ -22,7 +22,7 @@ Sky = {}
 local STAR_SLOT = 1
 local DIAMOND_SLOT = 2
 
-local STAR_FRAMES = 8
+local STAR_FRAMES = 4
 local CLUSTER_FRAMES = 8
 
 -- Keep in step with SKIES in native/gen_sky_variants.py.
@@ -30,7 +30,7 @@ local SKY_NAMES = { "Midnight", "Dawn", "Pastel", "Sunset", "Aurora", "Inferno",
 
 local MEDLEY_EVERY = 1         -- every Nth frame of the PC's show is on the disc
 local MEDLEY_FRAMES = 384 // MEDLEY_EVERY
-local MEDLEY_AHEAD = 6         -- frames asked for ahead of the one on show
+local MEDLEY_AHEAD = 4         -- frames asked for ahead of the one on show
 -- Loading every medley frame in one go stalls the scene for seconds, so they
 -- come in a few per tick, in the order they will be shown.
 local MEDLEY_LOADS_PER_TICK = 8
@@ -143,7 +143,7 @@ function Sky:UpdateSky(deltaTime)
 
     -- Swap the star texture only when the frame actually changes, rather than
     -- setting it every tick.
-    local frame = math.floor(self.time * self.twinklesPerSecond) % STAR_FRAMES
+    local frame = math.floor(self.time * self.twinklesPerSecond * 0.5) % STAR_FRAMES
     if (frame ~= self.frame) then
         self.frame = frame
         local tex = self.starFrames[frame + 1]
@@ -202,6 +202,18 @@ function Sky:UpdateSky(deltaTime)
         local nextFrame = math.floor(nextTime * fps) % MEDLEY_FRAMES
         if (Arrived(nextFrame + 1) ~= nil) then
             self.medleyTime = nextTime
+            self.waited = 0.0
+        else
+            -- A frame that NEVER comes: its read failed (the engine leaves such an asset unloaded,
+            -- where it used to crash). Waiting for it would stop the sky for good, so after a
+            -- moment it is skipped -- the picture holds for one frame -- and forgotten, so that it
+            -- is asked for afresh the next time round.
+            self.waited = (self.waited or 0.0) + deltaTime
+            if (self.waited > 0.4) then
+                self.window[nextFrame + 1] = nil
+                self.medleyTime = nextTime
+                self.waited = 0.0
+            end
         end
         dframe = math.floor(self.medleyTime * fps) % MEDLEY_FRAMES
         self.medleyShown = Arrived(dframe + 1)

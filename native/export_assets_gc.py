@@ -139,6 +139,7 @@ def sonic():
     print("Sonic: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
 
 
+STAR_FRAMES = 4                     # Sky.lua's STAR_FRAMES must say the same
 SKY_EVERY = 1                       # keep every Nth frame of the PC's 384. Sky.lua's MEDLEY_EVERY must say the same
 SKY_SHRINK = 1                      # and divide their size by this. 1 and 1: the PC's show exactly, 25 MB cooked.
 # That is far more than fits in memory, and it does not have to: the GameCube Sky.lua STREAMS the
@@ -178,6 +179,18 @@ def sky():
         for name in os.listdir(textures):
             if name.startswith("T_S2Sky_Diamonds_") or name.startswith("T_S2Sky_Medley_"):
                 os.remove(os.path.join(textures, name))
+    # FOUR star frames, not the PC's eight: they are held in memory, 512 KB each cooked, and 2 MB
+    # is the difference between this build having room to breathe and not. The twinkle is drawn
+    # as a cycle of `frames` steps, so it is asked for as a four-step cycle, not the first half of
+    # an eight-step one.
+    stars_of = pc_sky.gen_stars_frame
+    pc_sky.STAR_FRAMES = STAR_FRAMES
+    pc_sky.gen_stars_frame = lambda field, f, *a, **k: stars_of(field, f, frames=STAR_FRAMES)
+    if os.path.isdir(textures):
+        for name in os.listdir(textures):
+            if name.startswith("T_S2Sky_Stars_"):
+                os.remove(os.path.join(textures, name))
+
     pc_sky.OUT = os.path.join(PROJ, "Assets")
     pc_sky.DIAMOND_MODE = "medley"
     pc_sky.main()
@@ -204,9 +217,12 @@ def hud():
 
     pc_font.OUT = os.path.join(PROJ, "Assets", "Textures", "UI", "F_SonicUI.oct")
     pc_font.LOOK = os.path.join(HERE, "..", "F_SonicUI_atlas_gc.png")
-    pc_font.SIZE = 30
-    pc_font.ATLAS_W, pc_font.ATLAS_H = 256, 256
-    pc_font.OUTLINE, pc_font.SHADOW = 1, (2, 2)
+    # Drawn at the size it is SHOWN. At 30 px (a 256 x 256 atlas) the numbers, shown at about 36,
+    # and COOL !, at about 52, were stretched up and came out blurry. 48 px fills a 512 x 256 atlas:
+    # 512 KB, which is there to spend.
+    pc_font.SIZE = 48
+    pc_font.ATLAS_W, pc_font.ATLAS_H = 512, 256
+    pc_font.OUTLINE, pc_font.SHADOW = 2, (3, 3)
     pc_font.PAD = pc_font.OUTLINE + 2
     pc_font.ONLY = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!"     # numbers, COOL !, TOO BAD !, the banners
     pc_font.main()
