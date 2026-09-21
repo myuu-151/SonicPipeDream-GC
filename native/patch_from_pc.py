@@ -31,8 +31,6 @@ CHANGES = [
 --     A button        jump                                                  (Space)
 --     Start           start again                                           (R)
 """),
-    # -- fewer spin meshes: export_gc.py writes 6
-    ("local RING_SPIN_FRAMES = 12 ", "local RING_SPIN_FRAMES = 6  "),
     # -- less of everything alive at once
     ("local SEE_AHEAD, SEE_BEHIND = 110, 6 ", """local PIECES_AHEAD, PIECES_BEHIND = 72, 12   -- frames of TRACK shown round the player. The PC shows all
                                         -- 121 pieces and lets the engine cull; here a piece is up to
@@ -82,13 +80,15 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     ("    self:UpdateObjects()\n", """    self:UpdateObjects()
     self:UpdatePieces()
     self.fpsTime, self.fpsFrames = self.fpsTime + deltaTime, self.fpsFrames + 1
+    self.worstFrame = math.max(self.worstFrame or 0.0, deltaTime)      -- an average hides a spike; this does not
     if (self.fpsTime >= 0.5) then
         local round = self.data.sections[math.min(self.section, #self.data.sections)]
         -- free memory, in KB: THE number on a 24 MB machine. (0 where the engine cannot tell.)
         local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or 0
-        self.readout:SetText(string.format("%.1f fps  %d pieces  RINGS %d/%d  free %d KB", self.fpsFrames / self.fpsTime,
+        self.readout:SetText(string.format("%.1f fps  worst %d ms  %d pieces  RINGS %d/%d  free %d KB",
+                                           self.fpsFrames / self.fpsTime, math.floor(self.worstFrame * 1000.0 + 0.5),
                                            self.piecesShown, self.rings, round.quota, free))
-        self.fpsTime, self.fpsFrames = 0.0, 0
+        self.fpsTime, self.fpsFrames, self.worstFrame = 0.0, 0, 0.0
     end
 """),
     ("-- Keep alive only what is near the player.\n", """-- Show only the track near the player. (Two nodes a piece: the matte pipe and the glossy trim.)

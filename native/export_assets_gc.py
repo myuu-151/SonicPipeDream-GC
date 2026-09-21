@@ -8,9 +8,9 @@ SONIC      proj/Assets/Sonic/ is copied as it is. It looked like the expensive p
            one for every frame of his animation -- and it is 1.7 MB. It fits.
 
 SOUNDS     The PC keeps its two music tracks as raw PCM: 46 MB, twice this machine's memory.
-           Here they are Ogg Vorbis with the asset's STREAM flag set, which the engine's GameCube
-           audio decodes a little at a time as it plays: a track then costs its compressed size.
-           Mono, 32 kHz. The effects stay raw PCM (they must start the instant they are asked
+           Here they are stereo Ogg Vorbis at 32 kHz with the asset's STREAM flag set: the engine
+           leaves the audio ON THE DISC and decodes it a little at a time as it plays, so a track
+           costs no memory to speak of. The effects stay raw PCM (they must start the instant they are asked
            for) but go down to mono 22 kHz, which takes them from 2 MB to about half a megabyte.
 
 SKY        The PC's classic sky is a 384-frame show of diamond patterns, about 200 MB. It is THAT
@@ -32,7 +32,7 @@ PC = os.path.abspath(os.path.join(HERE, "..", "..", "Sonic2Special3D"))
 PROJ = os.path.abspath(os.path.join(HERE, "..", "proj"))
 
 MAGIC, VERSION, TYPE_SOUNDWAVE = 0x4F435421, 14, 0x9A6A5AC0
-MUSIC_RATE, MUSIC_QUALITY = 32000, 0.35
+MUSIC_RATE, MUSIC_QUALITY = 32000, 0.5     # stereo, Vorbis quality 0.5: about 96 kbit/s
 EFFECT_RATE = 22050
 
 # file in the PC's external/audio, asset name, uuid: the names and uuids are the PC's, so the
@@ -43,6 +43,26 @@ EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_Lo
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014)]
 NORMALISE = {"SW_GetEmerald": 0.97}         # as the PC does: that file is quiet
+
+
+def stereo_at(path, rate):
+    """Both channels (a mono file is doubled), at `rate`. Shape: frames x 2."""
+    data, src_rate = soundfile.read(path, dtype="float64", always_2d=True)
+    if data.shape[1] == 1:
+        data = numpy.repeat(data, 2, axis=1)
+    data = data[:, :2]
+    if src_rate == rate:
+        return data
+    width = max(1, int(round(src_rate / float(rate))))
+    n = int(len(data) * rate / float(src_rate))
+    at = numpy.arange(n) * (src_rate / float(rate))
+    out = numpy.empty((n, 2))
+    for c in range(2):
+        ch = data[:, c]
+        if width > 1:
+            ch = numpy.convolve(ch, numpy.ones(width) / width, mode="same")
+        out[:, c] = numpy.interp(at, numpy.arange(len(ch)), ch)
+    return out
 
 
 def mono_at(path, rate):
@@ -75,25 +95,26 @@ def sounds():
     src = os.path.join(PC, "external", "audio")
     total = 0
     for file_name, asset, uuid in MUSIC:
-        mono = mono_at(os.path.join(src, file_name), MUSIC_RATE)
-        if os.environ.get("GC_MUSIC_SECONDS"):                 # a test: is a hang or a silence about SIZE?
-            mono = mono[:int(float(os.environ["GC_MUSIC_SECONDS"]) * MUSIC_RATE)]
-        # RAW PCM here, with the COMPRESS and STREAM flags set: the engine's own cook then encodes
-        # the Vorbis for the console. A track encoded here (libsndfile) and handed over ready-made
-        # hung the GameCube at the loading screen; the engine's encoder is the one its streaming
-        # decoder was written against. These two source files are big (17 MB each) and are not
-        # committed: this script remakes them from the PC repo's WAVs.
-        pcm = numpy.clip(mono * 32767.0, -32768, 32767).astype("<i2").tobytes()
-        name = asset.encode("ascii")
-        d = struct.pack("<IIIB", MAGIC, VERSION, TYPE_SOUNDWAVE, 0)
-        d += struct.pack("<Q", uuid) + struct.pack("<I", len(name)) + name
-        d += struct.pack("<ff", 1.0, 1.0) + struct.pack("<b", 0)
-        d += struct.pack("<???", True, False, True)             # compress (at cook), not internally, STREAM
-        d += struct.pack("<IIIIII", 1, 16, MUSIC_RATE, len(mono), 2, MUSIC_RATE * 2)
-        d += struct.pack("<?", False) + struct.pack("<I", len(pcm)) + pcm
+        audio = stereo_at(os.path.join(src, file_name), MUSIC_RATE)
+        if os.environ.get("GC_MUSIC_SECONDS"):                 # a test: trims the tracks
+            audio = audio[:int(float(os.environ["GC_MUSIC_SECONDS"]) * MUSIC_RATE)]
+        # ENCODED HERE, stereo, at a proper quality. The engine's own cook encodes Vorbis at quality
+        # 0.1 (about 55 kbit/s mono), and it showed. A ready-made track was tried once before and
+        # hung the console at the loading screen -- but that was MEMORY: it was held in RAM then.
+        # The engine now leaves a Stream sound's audio on the disc, so its size costs nothing.
+        # Written in blocks: libsndfile's Vorbis writer dies without a word when handed minutes at once.
+        ogg = io.BytesIO()
+        with soundfile.SoundFile(ogg, "w", samplerate=MUSIC_RATE, channels=2, format="OGG", subtype="VORBIS",
+                                 compression_level=1.0 - MUSIC_QUALITY) as f:
+            for at in range(0, len(audio), MUSIC_RATE):
+                f.write(audio[at:at + MUSIC_RATE])
+        body = ogg.getvalue()
+        d = sound_header(asset, uuid, True, 2, MUSIC_RATE, len(audio))
+        d += struct.pack("<?", True) + struct.pack("<I", len(body)) + body
         open(os.path.join(out, asset + ".oct"), "wb").write(d)
         total += len(d)
-        print("  %-24s PCM to be cooked to streamed Vorbis, %.1f s, %.2f MB" % (asset, len(mono) / float(MUSIC_RATE), len(d) / 1048576.0))
+        print("  %-24s stereo Vorbis, streamed from the disc, %.1f s, %.2f MB, %d kbit/s" % (
+            asset, len(audio) / float(MUSIC_RATE), len(d) / 1048576.0, len(body) * 8 / (len(audio) / float(MUSIC_RATE)) / 1000))
     for file_name, asset, uuid in EFFECTS:
         mono = mono_at(os.path.join(src, file_name), EFFECT_RATE)
         if asset in NORMALISE:

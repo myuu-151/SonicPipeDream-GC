@@ -8,9 +8,9 @@ generator, the stage .json files and the source art; this script READS them and 
 cut down for a machine with 24 MB of memory:
 
     proj/Assets/Stage/SM_Piece_<Name>[_Gloss]_P<N>.oct   the track pieces in ONE palette, the stage's
-    proj/Assets/Stage/SM_Ring.oct, SM_Ring_00..05.oct    a low-poly ring, 6 spin frames (the PC has 12)
-    proj/Assets/Stage/SM_RingRainbow_0..8.oct            the same low-poly ring, in the arch's colours
-    proj/Assets/Stage/SM_Bomb.oct                        a PLACEHOLDER: the PC's bomb is 4000 triangles
+    proj/Assets/Stage/SM_Ring.oct, SM_Ring_00..11.oct    the PC's ring and its 12 spin frames
+    proj/Assets/Stage/SM_RingRainbow_0..8.oct            the arch's rings, in its colours
+    proj/Assets/Stage/SM_Bomb.oct                        the PC's bomb
     proj/Assets/Stage/SM_PlayerBall.oct, SM_Emerald.oct
     proj/Scripts/StageData<N>.lua                        the same table the PC game reads
 
@@ -32,8 +32,12 @@ PC_EXPORTER = os.path.join(PC, "native", "export_to_octave.py")
 PROJ = os.path.abspath(os.path.join(HERE, "..", "proj"))
 ASSETS = os.path.join(PROJ, "Assets", "Stage")
 
-RING_AROUND, RING_ACROSS = 14, 6    # the PC's ring is 36 x 16: 1152 triangles. This is 168.
-RING_SPIN_FRAMES = 6                # SpecialStage.lua's RING_SPIN_FRAMES must say the same
+# GEOMETRY IS NOT WHAT THIS MACHINE IS SHORT OF. The small meshes are the PC's own, triangle for
+# triangle: the 36 x 16 ring in all 12 spin frames, the 4,000 triangle bomb. They were cut down here
+# at first out of habit, and it cost the ring its metal: the gold is painted per vertex in bands
+# that run round the tube, and at 6 segments the bands fell between the vertices. What is short
+# is MEMORY (textures, audio), and that is where the GameCube build differs from the PC.
+RING_SPIN_FRAMES = 12               # as the PC; SpecialStage.lua counts the same
 
 source = open(PC_EXPORTER, encoding="utf-8").read()
 source = source[:source.rindex("\nmain()")]
@@ -66,15 +70,20 @@ PATH_SAMPLES = 32
 
 def write_painted_gloss(name, index, mesh, colour_of_slot, keep_slot, path):
     Vector = pc["Vector"]
-    frames = [path.frame(path.length * i / PATH_SAMPLES) for i in range(PATH_SAMPLES + 1)]
-    spots = [(m.translation.copy(), m.col[0].xyz.normalized(), m.col[2].xyz.normalized()) for m in frames]
+    if path is not None:
+        frames = [path.frame(path.length * i / PATH_SAMPLES) for i in range(PATH_SAMPLES + 1)]
+        spots = [(m.translation.copy(), m.col[0].xyz.normalized(), m.col[2].xyz.normalized()) for m in frames]
+    else:
+        # A thing the game stands on the pipe (a bomb): its own X is up the track and its own Z
+        # is away from the pipe's surface, toward the axis, wherever round the pipe it is.
+        spots = [(Vector((0, 0, 0)), Vector((1, 0, 0)), Vector((0, 0, 1)))]
     radius = rm.PIPE_RADIUS
 
     def paint(p, n, base):
         origin, fwd, up = min(spots, key=lambda sp: (sp[0] - p).length_squared)
         axis = origin + up * radius                         # the middle of the pipe, level with here
         inward = (axis - p)
-        inward = inward.normalized() if inward.length > 1e-6 else up
+        inward = inward.normalized() if (path is not None and inward.length > 1e-6) else up
         light = (up + fwd * 0.25).normalized()
         eye = (-fwd + inward * 0.35).normalized()
         half = (light + eye).normalized()
@@ -122,6 +131,88 @@ def write_painted_gloss(name, index, mesh, colour_of_slot, keep_slot, path):
     return len(idx) // 3
 
 
+# --- really lit -----------------------------------------------------------------------------
+# On this machine a LIT material on a mesh that carries VERTEX COLOURS comes out unlit. Sonic, who
+# has a texture and no vertex colours, is lit properly. So a thing that must take the light gets
+# its colours Sonic's way: a tiny texture of swatches, one for each of its materials, with every
+# face's UVs parked in the middle of its swatch -- and no vertex colours at all.
+TYPE_TEXTURE = 0xCDBBDA30
+SWATCH = 8                          # pixels a swatch; nearest filtering, so the middle is the colour
+
+
+def write_lit_swatched(name, index, mesh, colours, specular=0.85, shininess=48.0):
+    Vector = pc["Vector"]
+    u8, u32, i32, f32 = pc["u8"], pc["u32"], pc["i32"], pc["f32"]
+    header, asset_ref, null_ref = pc["header"], pc["asset_ref"], pc["null_ref"]
+    uuid = pc["UUID_BASE"] + 0x900 + index * 4
+
+    # the swatches: one row
+    count = max(1, len(colours))
+    width = 1
+    while width < count * SWATCH:
+        width *= 2
+    pixels = bytearray()
+    for y in range(SWATCH):
+        for x in range(width):
+            c = colours[min(x // SWATCH, count - 1)]
+            pixels += bytes((int(c[0] * 255), int(c[1] * 255), int(c[2] * 255), 255))
+    d = header(TYPE_TEXTURE, uuid + 1, "T_" + name[3:])
+    d += u32(width) + u32(SWATCH) + u32(1) + u32(1)
+    d += u32(2) + u32(0) + u32(0)                          # RGBA8, NEAREST, clamp
+    d += u8(0) + u8(0) + u8(1) + u8(1) + u8(1)             # no mips, not a target, sRGB, keep uncompressed
+    d += bytes(pixels)
+    open(os.path.join(ASSETS, "T_" + name[3:] + ".oct"), "wb").write(d)
+
+    d = header(pc["TYPE_MATERIALLITE"], uuid + 2, "M_" + name[3:])
+    d += u32(0) + u32(1) + u32(0) + u32(0)                 # no params; LIT; opaque; no vertex colour
+    d += u32(1)
+    d += asset_ref(uuid + 1, "T_" + name[3:]) + u8(0) + u8(1)
+    for _ in range(3):
+        d += null_ref() + u8(0) + u8(1)
+    for _ in range(2):
+        d += f32(0) + f32(0) + f32(1) + f32(1)
+    d += f32(1) + f32(1) + f32(1) + f32(1)
+    d += f32(1) + f32(0) + f32(0) + f32(0)
+    d += f32(1.0) + f32(0.0) + f32(0.30) + f32(specular)   # fresnel power, emission, wrap lighting, specular
+    d += u32(2) + f32(1.0) + f32(0.5) + f32(shininess)
+    d += i32(0)
+    d += u8(0) + u8(0) + u8(1)
+    d += u8(0)
+    open(os.path.join(ASSETS, "M_" + name[3:] + ".oct"), "wb").write(d)
+
+    mesh.calc_loop_triangles()
+    normals = [Vector(n.vector) for n in mesh.corner_normals]
+    verts, index_of, idx = [], {}, []
+    lo, hi = Vector((1e9,) * 3), Vector((-1e9,) * 3)
+    for tri in mesh.loop_triangles:
+        su = (min(tri.material_index, count - 1) + 0.5) * SWATCH / float(width)
+        for corner, loop in zip(tri.vertices, tri.loops):
+            p = mesh.vertices[corner].co
+            n = normals[loop] if tri.use_smooth else Vector(tri.normal)
+            key = (round(p.x, 4), round(p.y, 4), round(p.z, 4), round(n.x, 3), round(n.y, 3), round(n.z, 3), su)
+            if key not in index_of:
+                index_of[key] = len(verts)
+                verts.append((to_octave(p), to_octave(n), su))
+                for k in range(3):
+                    lo[k], hi[k] = min(lo[k], to_octave(p)[k]), max(hi[k], to_octave(p)[k])
+            idx.append(index_of[key])
+    centre = (lo + hi) * 0.5
+    far = max((Vector(v[0]) - centre).length for v in verts)
+    d = header(pc["TYPE_STATICMESH"], uuid, name)
+    d += u32(len(verts)) + u32(len(idx)) + u32(1)
+    d += asset_ref(uuid + 2, "M_" + name[3:])
+    d += u8(0) + u8(0)                                     # no triangle collision; NO vertex colour
+    for p, n, su in verts:
+        d += f32(p[0]) + f32(p[1]) + f32(p[2]) + f32(su) + f32(0.5) + f32(0) + f32(0)
+        d += f32(n[0]) + f32(n[1]) + f32(n[2])
+    for i in idx:
+        d += u32(i)
+    d += u8(0) + u32(0)
+    d += f32(centre.x) + f32(centre.y) + f32(centre.z) + f32(far)
+    open(os.path.join(ASSETS, name + ".oct"), "wb").write(d)
+    return len(idx) // 3
+
+
 def triangles(mesh):
     mesh.calc_loop_triangles()
     return len(mesh.loop_triangles)
@@ -149,19 +240,31 @@ def main():
         print("  piece %-12s %5d triangles" % (piece, triangles(p["mesh"])))
 
     def ring(spin=0.0):
-        return simple("Ring", lambda bm: torus(bm, around=RING_AROUND, across=RING_ACROSS, spin=spin))
+        return simple("Ring", lambda bm: torus(bm, spin=spin))          # the PC's ring: torus() as it stands
+
+    def from_blend(blend, mesh_name):
+        with pc["bpy"].data.libraries.load(blend) as (src, dst):
+            dst.meshes = [n for n in src.meshes if n == mesh_name]
+        return dst.meshes[0]
 
     write_mesh("SM_Ring", 200, ring(), lambda k: pc["GOLD"], material="M_StageMatte", paint=gold)
     for i in range(RING_SPIN_FRAMES):
         write_mesh("SM_Ring_%02d" % i, 230 + i, ring(math.pi * i / RING_SPIN_FRAMES), lambda k: pc["GOLD"],
                    material="M_StageMatte", paint=gold)
-    for i, c in enumerate(pc["RAINBOW"] if "RAINBOW" in pc else __import__("gen_stage").RAINBOW):
-        write_mesh("SM_RingRainbow_%d" % i, 210 + i, ring(), lambda k, c=c: c, material="M_StageGlow")
-    write_mesh("SM_Bomb", 220, simple("Bomb", lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.5)),
-               lambda k: (0.80, 0.08, 0.10))
+    arch_ring = from_blend(pc["RING_BLEND"], "Ring")
+    for i, c in enumerate(__import__("gen_stage").RAINBOW):
+        write_mesh("SM_RingRainbow_%d" % i, 210 + i, arch_ring, lambda k, c=c: c, material="M_StageGlow")
+    bomb = from_blend(pc["BOMB_BLEND"], "Bomb")
+    # (Cutting the bomb to 800 triangles was tried when the build dropped to 52-58 fps. It changed
+    # nothing, frame times stayed at 22-27 ms: geometry is not the cost here. The PC's bomb stays.)
+    bomb_colours = [tuple(pc["linear_to_srgb"](x) for x in m.diffuse_color[:3]) for m in bomb.materials]
+    # LIT, for real: see write_lit_swatched. (Painting the shading on, as the arch spheres have it,
+    # was tried first and still read as unlit: a bomb turns with the pipe, and painted light does not.)
+    write_lit_swatched("SM_Bomb", 0, bomb, bomb_colours)
     write_mesh("SM_PlayerBall", 221, simple("Ball", lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.7)),
                lambda k: (0.12, 0.30, 0.95))
     write_mesh("SM_Emerald", 222, simple("Emerald", pc["octahedron"]), lambda k: (0.10, 0.85, 0.95))
+    pc["write_shadow"]()            # the drop shadow blob: the PC's, as it is
 
     # The track and the stage table: exactly what the PC writes, one palette's names.
     paths = piece_path
