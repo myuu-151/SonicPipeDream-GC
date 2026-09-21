@@ -46,6 +46,82 @@ write_mesh, simple, torus, gold, to_octave = pc["write_mesh"], pc["simple"], pc[
 STAGE = pc["STAGE"]
 
 
+# --- the gloss, painted -------------------------------------------------------------------
+# On the PC the arch spheres are a LIT material with a strong specular highlight. The GameCube
+# renderer has diffuse light only, so there the spheres came out flat. The highlight is painted
+# into the vertices here instead, the way the gold rings' reflection is: this game only ever
+# looks DOWN THE TRACK, so where a highlight sits on a sphere is known in advance.
+#   - the light is the PC's: the same ambient and sun strengths, from above and a little ahead
+#   - the eye is up the track behind the sphere and in toward the pipe's axis, where the camera rides
+#   - the highlight is tinted by the sphere's own colour, as the PC's shader tints its specular
+# It follows the TRACK: a corner piece turns through 90 degrees, so each vertex takes "forward"
+# and "up" from the nearest point of the piece's own centre line, not from the piece as a whole.
+PC_AMBIENT, PC_SUN = 0.62, 0.45     # SpecialStage.lua's ambient light and sun, as on the PC
+GLOSS_SPECULAR = 0.85               # M_StageGloss on the PC
+GLOSS_SHININESS = 22.0              # the PC's is 48; a vertex-painted highlight needs to be a little
+                                    # broader than that, or it falls between the vertices and flickers
+PATH_SAMPLES = 32
+# (A brighter version -- the diffuse lifted 1.3x, a sharper and stronger highlight -- was tried to
+# chase the PC's brighter orange. The darker one here was preferred, so this is it.)
+
+def write_painted_gloss(name, index, mesh, colour_of_slot, keep_slot, path):
+    Vector = pc["Vector"]
+    frames = [path.frame(path.length * i / PATH_SAMPLES) for i in range(PATH_SAMPLES + 1)]
+    spots = [(m.translation.copy(), m.col[0].xyz.normalized(), m.col[2].xyz.normalized()) for m in frames]
+    radius = rm.PIPE_RADIUS
+
+    def paint(p, n, base):
+        origin, fwd, up = min(spots, key=lambda sp: (sp[0] - p).length_squared)
+        axis = origin + up * radius                         # the middle of the pipe, level with here
+        inward = (axis - p)
+        inward = inward.normalized() if inward.length > 1e-6 else up
+        light = (up + fwd * 0.25).normalized()
+        eye = (-fwd + inward * 0.35).normalized()
+        half = (light + eye).normalized()
+        diffuse = PC_AMBIENT + PC_SUN * max(0.0, n.dot(light))
+        spec = GLOSS_SPECULAR * max(0.0, n.dot(half)) ** GLOSS_SHININESS
+        return tuple(min(1.0, c * diffuse + c * spec * 1.6 + spec * 0.25) for c in base)
+
+    mesh.calc_loop_triangles()
+    normals = [Vector(n.vector) for n in mesh.corner_normals]
+    verts, index_of, idx = [], {}, []
+    lo, hi = Vector((1e9,) * 3), Vector((-1e9,) * 3)
+    for tri in mesh.loop_triangles:
+        if not keep_slot(tri.material_index):
+            continue
+        base = colour_of_slot(tri.material_index)
+        for corner, loop in zip(tri.vertices, tri.loops):
+            p = mesh.vertices[corner].co
+            n = normals[loop] if tri.use_smooth else Vector(tri.normal)
+            rgb = tuple(max(0, min(255, int(round(255 * c)))) for c in paint(p, n, base))
+            key = (round(p.x, 4), round(p.y, 4), round(p.z, 4), rgb)
+            if key not in index_of:
+                index_of[key] = len(verts)
+                verts.append((to_octave(p), to_octave(n), rgb))
+                for k in range(3):
+                    lo[k], hi[k] = min(lo[k], to_octave(p)[k]), max(hi[k], to_octave(p)[k])
+            idx.append(index_of[key])
+    if not verts:
+        return 0
+    centre = (lo + hi) * 0.5
+    far = max((Vector(v[0]) - centre).length for v in verts)
+    u8, u32, f32 = pc["u8"], pc["u32"], pc["f32"]
+    d = pc["header"](pc["TYPE_STATICMESH"], pc["UUID_BASE"] + 1 + index, name)
+    d += u32(len(verts)) + u32(len(idx)) + u32(1)
+    d += pc["asset_ref"](pc["MATERIALS"]["M_StageMatte"][0], "M_StageMatte")     # unlit: the paint IS the light
+    d += u8(0) + u8(1)
+    for p, n, rgb in verts:
+        d += f32(p[0]) + f32(p[1]) + f32(p[2]) + f32(0) + f32(0) + f32(0) + f32(0)
+        d += f32(n[0]) + f32(n[1]) + f32(n[2])
+        d += u32(rgb[0] | (rgb[1] << 8) | (rgb[2] << 16) | (255 << 24))
+    for i in idx:
+        d += u32(i)
+    d += u8(0) + u32(0)
+    d += f32(centre.x) + f32(centre.y) + f32(centre.z) + f32(far)
+    open(os.path.join(ASSETS, name + ".oct"), "wb").write(d)
+    return len(idx) // 3
+
+
 def triangles(mesh):
     mesh.calc_loop_triangles()
     return len(mesh.loop_triangles)
@@ -60,6 +136,7 @@ def main():
 
     print("\nGameCube meshes -> %s" % ASSETS)
     pieces = grl.load_pieces()
+    piece_path = pc["piece_paths"]()
     colours_of = palette["materials"]
     for i, (piece, p) in enumerate(pieces.items()):
         slots = [m.name.split(".")[0] if m else "" for m in p["mesh"].materials]
@@ -67,8 +144,8 @@ def main():
         glossy = [n in pc["GLOSSY_SLOTS"] for n in slots]
         write_mesh("SM_Piece_%s_P%d" % (piece, STAGE), 16 * STAGE + i, p["mesh"], lambda k, c=colours: c[k],
                    material="M_StageMatte", keep_slot=lambda k, g=glossy: not g[k])
-        write_mesh("SM_Piece_%s_Gloss_P%d" % (piece, STAGE), 16 * STAGE + 8 + i, p["mesh"],
-                   lambda k, c=colours: c[k], material="M_StageGloss", keep_slot=lambda k, g=glossy: g[k])
+        write_painted_gloss("SM_Piece_%s_Gloss_P%d" % (piece, STAGE), 16 * STAGE + 8 + i, p["mesh"],
+                            lambda k, c=colours: c[k], lambda k, g=glossy: g[k], piece_path[piece])
         print("  piece %-12s %5d triangles" % (piece, triangles(p["mesh"])))
 
     def ring(spin=0.0):
@@ -87,7 +164,7 @@ def main():
     write_mesh("SM_Emerald", 222, simple("Emerald", pc["octahedron"]), lambda k: (0.10, 0.85, 0.95))
 
     # The track and the stage table: exactly what the PC writes, one palette's names.
-    paths = pc["piece_paths"]()
+    paths = piece_path
     chain = pc["ChainPath"]([paths[n] for n in data["pieces"]])
     piece_list = []
     for piece, (start, origin, path) in zip(data["pieces"], chain.parts):

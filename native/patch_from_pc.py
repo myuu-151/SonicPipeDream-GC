@@ -60,14 +60,9 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     self.readout:SetText("...")
     self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
 """),
-    # -- the light. The GameCube renderer has DIFFUSE light only: no specular, no fresnel. On the PC
-    # the arch spheres and Sonic get their shape from a gentle sun plus a highlight; with the
-    # highlight gone that gentle sun leaves them flat. So the sun is stronger here and the ambient
-    # lower, and the shape comes from the diffuse falloff alone. (The pipe is unlit on both: its
-    # shading is baked into its vertices, so none of this touches it.)
-    ("    sun:SetIntensity(0.45)\n", "    sun:SetIntensity(0.95)\n"),
-    ("    world:SetAmbientLightColor(Vec(0.62, 0.62, 0.66, 1.0))\n",
-     "    world:SetAmbientLightColor(Vec(0.40, 0.40, 0.46, 1.0))\n"),
+    # (The light is the PC's, untouched. It was stronger here for a while, to give the arch spheres
+    # some shape without the specular highlight the GameCube renderer lacks; now export_gc.py
+    # PAINTS that highlight onto them, so the two machines are lit alike.)
     # -- a pad
     ("""        if (Input.IsKeyDown(Key.A)) then want = want + 1.0 end
         if (Input.IsKeyDown(Key.D)) then want = want - 1.0 end

@@ -212,8 +212,8 @@ function SpecialStage:Build()
     sun:SetName("StageSun")
     sun:SetDirection(Vec(0.35, -1.0, -0.25))
     sun:SetColor(Vec(1.0, 0.98, 0.94, 1.0))
-    sun:SetIntensity(0.95)
-    world:SetAmbientLightColor(Vec(0.40, 0.40, 0.46, 1.0))
+    sun:SetIntensity(0.45)
+    world:SetAmbientLightColor(Vec(0.62, 0.62, 0.66, 1.0))
 
     -- every ring and bomb in one list, in the order they are met
     self.objects = {}
