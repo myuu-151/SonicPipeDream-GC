@@ -114,16 +114,34 @@ end
 ]
 
 
-# Scripts that are the PC's unchanged. (The sky script works out for itself that it has been
-# given the 8-frame clusters sky and not the 384-frame medley.)
-COPIED = ["Sky.lua", "SpecialStageMusic.lua"]
+# Scripts that are the PC's with a change or two (or none).
+OTHERS = {
+    "SpecialStageMusic.lua": [],
+    # The PC's sky with a quarter of the frames (export_assets_gc.py's SKY_EVERY keeps every
+    # fourth), so stepped through at a quarter of the rate to run at the same speed; and brought
+    # in from the disc two a tick, not eight.
+    # The rate is scaled WHERE IT IS USED, not where it is set: medleyFramesPerSecond is a
+    # property, the scene file stores the PC's 14, and a stored property beats the default in
+    # Create(). Changing the default did nothing and the sky ran at double speed.
+    "Sky.lua": [
+        ("local MEDLEY_FRAMES = 384\n", "local MEDLEY_FRAMES = 96\nlocal MEDLEY_KEEP = 0.25      -- one frame in four of the PC's show is here\n"),
+        ("local MEDLEY_LOADS_PER_TICK = 8\n", "local MEDLEY_LOADS_PER_TICK = 2\n"),
+        ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),
+        ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),
+        ("* self.medleyFramesPerSecond)", "* self.medleyFramesPerSecond * MEDLEY_KEEP)"),
+    ],
+}
 
 
 def main():
-    for name in COPIED:
+    for name, changes in OTHERS.items():
         text = open(os.path.join(os.path.dirname(SRC), name), encoding="utf-8", newline="").read().replace("\r\n", "\n")
+        for old, new in changes:
+            if old not in text:
+                raise SystemExit("%s: a change no longer fits the PC script:\n%s" % (name, old))
+            text = text.replace(old, new, 1)
         open(os.path.join(os.path.dirname(OUT), name), "w", encoding="utf-8", newline="\n").write(
-            "-- COPIED from the PC repo by native/patch_from_pc.py. Change it there.\n" + text)
+            "-- FROM the PC repo, by native/patch_from_pc.py. Change it there.\n" + text)
     s = open(SRC, encoding="utf-8", newline="").read().replace("\r\n", "\n")
     for n, (old, new) in enumerate(CHANGES):
         if old not in s:

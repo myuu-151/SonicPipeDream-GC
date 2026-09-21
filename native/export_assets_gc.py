@@ -13,9 +13,9 @@ SOUNDS     The PC keeps its two music tracks as raw PCM: 46 MB, twice this machi
            Mono, 32 kHz. The effects stay raw PCM (they must start the instant they are asked
            for) but go down to mono 22 kHz, which takes them from 2 MB to about half a megabyte.
 
-SKY        The PC's classic sky is a 384-frame show, about 200 MB. Its generator has a second
-           mode written for this machine: five clusters of diamonds with a colour band sliding
-           through them, 8 frames. That is run here, pointed at this project.
+SKY        The PC's classic sky is a 384-frame show of diamond patterns, about 200 MB. It is THAT
+           sky here too, cut to fit: every fourth frame at full size -- 96 frames of 512 x 256,
+           about 6 MB once cooked. See sky().
 """
 
 import io
@@ -116,12 +116,48 @@ def sonic():
     print("Sonic: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
 
 
+SKY_EVERY = 4                       # keep every Nth frame of the PC's 384: 96 frames. Sky.lua is told the same
+SKY_SHRINK = 1                      # at the PC's full 512 x 256: halved, it was plainly blurry on the dome.
+                                    # Cooked, a frame is 64 KB, so 6 MB in all. The size must stay a power of
+                                    # two (the texture repeats, and GX only repeats those), so the way to pay
+                                    # for sharpness is frames, not an in-between size.
+
+
 def sky():
+    """THE PC'S OWN SKY: the 384-frame medley of diamond patterns, row gradient and all -- not the
+    8-frame clusters sky its generator can also write, which the game never shows. The PC's
+    generator is run as it is; only the frames it is handed are different. It asks the medley
+    module for each frame's pixels, so that module is told there are half as many frames, each
+    half the size, and gives every second frame of the real show, scaled down."""
+    from PIL import Image
     sys.path.insert(0, os.path.join(PC, "native"))
     import gen_s2sky_assets as pc_sky
+    import s2sky_medley as medley
+
+    full_w, full_h, full_pixels = medley.TEX_W, medley.TEX_H, medley.frame_pixels
+
+    def small(f):
+        img = Image.frombytes("RGBA", (full_w, full_h), full_pixels(f * SKY_EVERY))
+        # Scaled with the colour weighted by its opacity ("RGBa"), or the transparent black round
+        # every diamond bleeds into its edge. Then hard alpha again: the console's compressed
+        # textures have one bit of it.
+        img = img.convert("RGBa").resize((full_w // SKY_SHRINK, full_h // SKY_SHRINK), Image.BOX).convert("RGBA")
+        r, g, b, a = img.split()
+        return Image.merge("RGBA", (r, g, b, a.point(lambda v: 255 if v >= 128 else 0))).tobytes()
+
+    medley.FRAMES = medley.FRAMES // SKY_EVERY
+    medley.TEX_W, medley.TEX_H = full_w // SKY_SHRINK, full_h // SKY_SHRINK
+    medley.frame_pixels = small
+
+    textures = os.path.join(PROJ, "Assets", "Textures")
+    if os.path.isdir(textures):                      # the clusters sky's frames, if an older export left them
+        for name in os.listdir(textures):
+            if name.startswith("T_S2Sky_Diamonds_") or name.startswith("T_S2Sky_Medley_"):
+                os.remove(os.path.join(textures, name))
     pc_sky.OUT = os.path.join(PROJ, "Assets")
-    pc_sky.DIAMOND_MODE = "clusters"
+    pc_sky.DIAMOND_MODE = "medley"
     pc_sky.main()
+    print("sky: %d frames at %d x %d" % (medley.FRAMES, medley.TEX_W, medley.TEX_H))
 
 
 if __name__ == "__main__":

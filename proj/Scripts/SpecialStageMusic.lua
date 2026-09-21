@@ -1,4 +1,4 @@
--- COPIED from the PC repo by native/patch_from_pc.py. Change it there.
+-- FROM the PC repo, by native/patch_from_pc.py. Change it there.
 -- SpecialStageMusic.lua
 -- Plays the special stage music: the intro once, then the loop for ever.
 -- Attach to any node in the scene.

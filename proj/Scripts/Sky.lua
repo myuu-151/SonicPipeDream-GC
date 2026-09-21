@@ -1,4 +1,4 @@
--- COPIED from the PC repo by native/patch_from_pc.py. Change it there.
+-- FROM the PC repo, by native/patch_from_pc.py. Change it there.
 -- Sky.lua
 -- Sonic 2 special-stage sky: dome (SM_SkyDome) with M_Sky
 -- (gradient + twinkling starfield, and the diamond show over them).
@@ -28,10 +28,11 @@ local CLUSTER_FRAMES = 8
 -- Keep in step with SKIES in native/gen_sky_variants.py.
 local SKY_NAMES = { "Midnight", "Dawn", "Pastel", "Sunset", "Aurora", "Inferno", "Noir" }
 
-local MEDLEY_FRAMES = 384
+local MEDLEY_FRAMES = 96
+local MEDLEY_KEEP = 0.25      -- one frame in four of the PC's show is here
 -- Loading every medley frame in one go stalls the scene for seconds, so they
 -- come in a few per tick, in the order they will be shown.
-local MEDLEY_LOADS_PER_TICK = 8
+local MEDLEY_LOADS_PER_TICK = 2
 
 -- Asset names for a sky. The classic one keeps its original names.
 local function StarName(sky, i)
@@ -106,7 +107,7 @@ function Sky:LoadSky(sky)
     if (self.medley) then
         -- Load outward from wherever the show has got to, not from frame 1, so a
         -- change of sky shows its colours on the very next tick.
-        local now = math.floor(self.medleyTime * self.medleyFramesPerSecond) % MEDLEY_FRAMES
+        local now = math.floor(self.medleyTime * self.medleyFramesPerSecond * MEDLEY_KEEP) % MEDLEY_FRAMES
         self.diamondFrames[1] = first
         self.medleyLoaded = 1
         self.medleyCursor = now
@@ -171,11 +172,11 @@ function Sky:UpdateSky(deltaTime)
         -- playback can catch the loader up, and waiting a tick is better than
         -- skipping ahead and showing a gap.
         local nextTime = self.medleyTime + deltaTime
-        local nextFrame = math.floor(nextTime * self.medleyFramesPerSecond) % MEDLEY_FRAMES
+        local nextFrame = math.floor(nextTime * self.medleyFramesPerSecond * MEDLEY_KEEP) % MEDLEY_FRAMES
         if (self.diamondFrames[nextFrame + 1] ~= nil) then
             self.medleyTime = nextTime
         end
-        dframe = math.floor(self.medleyTime * self.medleyFramesPerSecond) % MEDLEY_FRAMES
+        dframe = math.floor(self.medleyTime * self.medleyFramesPerSecond * MEDLEY_KEEP) % MEDLEY_FRAMES
     else
         dframe = math.floor(self.time * self.colourShiftsPerSecond) % CLUSTER_FRAMES
     end
