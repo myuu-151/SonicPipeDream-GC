@@ -22,7 +22,7 @@ Sky = {}
 local STAR_SLOT = 1
 local DIAMOND_SLOT = 2
 
-local STAR_FRAMES = 4
+local STAR_FRAMES = 8
 local CLUSTER_FRAMES = 8
 
 -- Keep in step with SKIES in native/gen_sky_variants.py.
@@ -143,7 +143,7 @@ function Sky:UpdateSky(deltaTime)
 
     -- Swap the star texture only when the frame actually changes, rather than
     -- setting it every tick.
-    local frame = math.floor(self.time * self.twinklesPerSecond * 0.5) % STAR_FRAMES
+    local frame = math.floor(self.time * self.twinklesPerSecond) % STAR_FRAMES
     if (frame ~= self.frame) then
         self.frame = frame
         local tex = self.starFrames[frame + 1]

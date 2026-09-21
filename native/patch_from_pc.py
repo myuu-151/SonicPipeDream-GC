@@ -130,12 +130,6 @@ OTHERS = {
     # USED: medleyFramesPerSecond is a property, the scene file stores the PC's 14, and a stored
     # property beats a default set in Create().
     "Sky.lua": [
-        # The stars are the biggest thing HELD in memory: 8 frames of 1024 x 1024, 4 MB cooked. Four
-        # of them, stepped at half the rate, twinkle the same and give 2 MB back -- which this build
-        # needs, because a read that cannot get its buffer comes back EMPTY (see below).
-        ("local STAR_FRAMES = 8\n", "local STAR_FRAMES = 4\n"),
-        ("math.floor(self.time * self.twinklesPerSecond) % STAR_FRAMES",
-         "math.floor(self.time * self.twinklesPerSecond * 0.5) % STAR_FRAMES"),
         ("local MEDLEY_FRAMES = 384\n",
          "local MEDLEY_EVERY = 1         -- every Nth frame of the PC's show is on the disc\n"
          "local MEDLEY_FRAMES = 384 // MEDLEY_EVERY\n"
