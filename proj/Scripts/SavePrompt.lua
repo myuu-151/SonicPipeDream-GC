@@ -215,6 +215,7 @@ function SavePrompt:Tick(deltaTime)
     if (self.step == "done") then
         if (yes or no) then self:Close() end
     elseif (no) then
+        if (MenuSound ~= nil) then MenuSound("MenuBack") end
         self:Close()
     elseif (yes and self:CanSave()) then
         self:Say("SAVING", "DO NOT TOUCH THE MEMORY CARD", "OR THE POWER BUTTON", nil)

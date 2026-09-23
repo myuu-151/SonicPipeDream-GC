@@ -44,9 +44,10 @@ EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_Lo
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),
            ("Fail.wav", "SW_Fail", 0x51C0FFEE00300019), ("Explosion2.wav", "SW_Explosion", 0x51C0FFEE0030001A),
            ("Exit_SS.wav", "SW_ExitStage", 0x51C0FFEE0030001B),
-           # the menus: the highlight moving, a menu going on to the next (and pausing), a stage chosen
+           # the menus: the highlight moving, a menu going on to the next (and pausing), a stage chosen,
+           # and B, back out of a menu
            ("MenuButton.ogg", "SW_MenuMove", 0x51C0FFEE0030001C), ("Select.ogg", "SW_MenuSelect", 0x51C0FFEE0030001E),
-           ("SpecialWarp.ogg", "SW_MenuWarp", 0x51C0FFEE0030001D)]
+           ("SpecialWarp.ogg", "SW_MenuWarp", 0x51C0FFEE0030001D), ("back.wav", "SW_MenuBack", 0x51C0FFEE0030001F)]
 NORMALISE = {"SW_GetEmerald": 0.97}         # as the PC does: that file is quiet
 
 
