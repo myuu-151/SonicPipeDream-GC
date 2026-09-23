@@ -1,3 +1,5 @@
+![Sonic Pipe Dream](docs/header.png)
+
 # Sonic2Special3D-GC
 
 The GameCube build of [Sonic2Special3D](https://github.com/myuu-151/Sonic2Special3D), a 3D take on
