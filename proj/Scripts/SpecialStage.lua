@@ -1077,11 +1077,12 @@ function SpecialStage:Tick(deltaTime)
     if (not locked and self.stun <= 0.0) then
         if (Input.IsKeyDown(Key.A)) then want = want + 1.0 end
         if (Input.IsKeyDown(Key.D)) then want = want - 1.0 end
-        local stick = Input.GetGamepadAxisValue(Gamepad.AxisLX)
-        -- The stick reaches full steering at STICK_FULL and is a held key from there on. The PC's
+        -- A controller (PadInput.lua does its buttons): the stick, and the d-pad as a held key.
+        -- The stick reaches full steering at STICK_FULL and is a held key from there on: the
         -- momentum winds up only once he is at (97% of) full steering, and a GameCube stick never
-        -- reads 1.0: the engine divides by 127 and a real stick (and Dolphin's) tops out near 100,
-        -- less off the horizontal -- 0.7 or so. Below STICK_FULL it steers in proportion.
+        -- reads 1.0 -- the engine divides by 127 and a real stick tops out near 100, less off the
+        -- horizontal, 0.7 or so. Below STICK_FULL it steers in proportion.
+        local stick = Input.GetGamepadAxisValue(Gamepad.AxisLX)
         local STICK_DEAD, STICK_FULL = 0.2, 0.55
         local tilt = math.abs(stick)
         if (tilt > STICK_DEAD) then

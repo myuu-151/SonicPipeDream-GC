@@ -105,26 +105,7 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     # (The light is the PC's, untouched. It was stronger here for a while, to give the arch spheres
     # some shape without the specular highlight the GameCube renderer lacks; now export_gc.py
     # PAINTS that highlight onto them, so the two machines are lit alike.)
-    # -- a pad
-    ("""        if (Input.IsKeyDown(Key.A)) then want = want + 1.0 end
-        if (Input.IsKeyDown(Key.D)) then want = want - 1.0 end
-""", """        if (Input.IsKeyDown(Key.A)) then want = want + 1.0 end
-        if (Input.IsKeyDown(Key.D)) then want = want - 1.0 end
-        local stick = Input.GetGamepadAxisValue(Gamepad.AxisLX)
-        -- The stick reaches full steering at STICK_FULL and is a held key from there on. The PC's
-        -- momentum winds up only once he is at (97% of) full steering, and a GameCube stick never
-        -- reads 1.0: the engine divides by 127 and a real stick (and Dolphin's) tops out near 100,
-        -- less off the horizontal -- 0.7 or so. Below STICK_FULL it steers in proportion.
-        local STICK_DEAD, STICK_FULL = 0.2, 0.55
-        local tilt = math.abs(stick)
-        if (tilt > STICK_DEAD) then
-            local amount = math.min(1.0, (tilt - STICK_DEAD) / (STICK_FULL - STICK_DEAD))
-            want = want - ((stick > 0.0) and amount or -amount)
-        end
-        if (Input.IsGamepadButtonDown(Gamepad.Left)) then want = want + 1.0 end
-        if (Input.IsGamepadButtonDown(Gamepad.Right)) then want = want - 1.0 end
-        want = math.max(-1.0, math.min(1.0, want))
-"""),
+    # (The pad's steering, and PadInput.lua for its buttons, are the PC's own now.)
     # (Jumping on A, and pausing on Start, need nothing here: PadInput.lua gives the pad's A to
     # the PC's Space and its Start to Escape. Start restarted the stage before there was a pause
     # menu; there is no restart on the pad now, as there is none on the PC's menus.)
@@ -173,6 +154,7 @@ end
 # Scripts that are the PC's with a change or two (or none).
 OTHERS = {
     "SpecialStageMusic.lua": [],
+    "PadInput.lua": [],             # the controller, the PC's (which began as this build's own)
     # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
     # clear of the edges.
     "SpecialStageUI.lua": [("local SAFE_MARGIN = 0.0\n", "local SAFE_MARGIN = 0.04\n")],

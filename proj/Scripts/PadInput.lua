@@ -1,9 +1,11 @@
--- PadInput.lua (GAMECUBE ONLY: this file is not made from the PC repo)
+-- FROM the PC repo, by native/patch_from_pc.py. Change it there.
+-- PadInput.lua
 --
--- The PC game is played on a keyboard, and its scripts ask only about keys. Rather than change
--- every script that reads a key, the GameCube pad is folded INTO those keys here: asking whether
--- Enter is down answers yes while A is held. Every PC script then works with the pad as it
--- stands, and a gameplay fix on the PC needs nothing here.
+-- A controller, the GameCube's way, on both machines: the GameCube pad, and on the PC any pad
+-- SDL knows (a Switch Pro controller, Joy-Cons, PlayStation and Xbox pads; the engine's
+-- Input_Windows.cpp). The game's scripts ask only about keys, so rather than change every one
+-- the pad is folded INTO the keys here: asking whether Enter is down answers yes while A is held.
+-- Every script then works with the pad as it stands. (It began as the GameCube build's own.)
 --
 --     d-pad / stick up, down     Up, Down (W, S)          the menus, the pause menu
 --     A                          Enter, Space             choose; jump
@@ -12,8 +14,8 @@
 --                                Enter anywhere else      choose, on the menus
 --     B, while paused            Escape                   continue
 --
--- Steering is not here: patch_from_pc.py gives SpecialStage.lua the stick directly, so that
--- half a tilt steers half as hard.
+-- Steering is not here: SpecialStage.lua reads the stick directly, so that half a tilt steers
+-- half as hard.
 --
 -- Sky.lua requires this before anything else runs.
 
