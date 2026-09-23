@@ -106,6 +106,10 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
 """, """        if (Input.IsKeyDown(Key.A)) then want = want + 1.0 end
         if (Input.IsKeyDown(Key.D)) then want = want - 1.0 end
         local stick = Input.GetGamepadAxisValue(Gamepad.AxisLX)
+        -- Pushed past three-quarters of its travel the stick is a held key: full steering. The
+        -- PC's momentum winds up only once he is at (97% of) full steering, and a GameCube stick
+        -- rarely reads a whole 1.0 even at the rim, so without this it never built on the stick.
+        if (math.abs(stick) >= 0.75) then stick = (stick > 0.0) and 1.0 or -1.0 end
         if (math.abs(stick) > 0.25) then want = want - stick end
         if (Input.IsGamepadButtonDown(Gamepad.Left)) then want = want + 1.0 end
         if (Input.IsGamepadButtonDown(Gamepad.Right)) then want = want - 1.0 end
