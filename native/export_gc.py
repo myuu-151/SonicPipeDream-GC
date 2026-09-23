@@ -38,6 +38,7 @@ ASSETS = os.path.join(PROJ, "Assets", "Stage")
 # that run round the tube, and at 6 segments the bands fell between the vertices. What is short
 # is MEMORY (textures, audio), and that is where the GameCube build differs from the PC.
 RING_SPIN_FRAMES = 12               # as the PC; SpecialStage.lua counts the same
+BOMB_TEX_SIZE = 256                 # the bomb's texture here (the PC's is 1024): a bomb is small on a TV
 
 source = open(PC_EXPORTER, encoding="utf-8").read()
 source = source[:source.rindex("\nmain()")]
@@ -262,7 +263,18 @@ def main():
     bomb_colours = [tuple(pc["linear_to_srgb"](x) for x in m.diffuse_color[:3]) for m in bomb.materials]
     # LIT, for real: see write_lit_swatched. (Painting the shading on, as the arch spheres have it,
     # was tried first and still read as unlit: a bomb turns with the pipe, and painted light does not.)
-    write_lit_swatched("SM_Bomb", 0, bomb, bomb_colours)
+    if os.path.exists(pc["BOMB_TEXTURED"]) and os.path.exists(pc["BOMB_LIT"]):
+        # THE PC'S TEXTURED BOMB (native/texture_bomb.py): its metal detail and lighting baked into
+        # one picture, on a basic lit material, no vertex colours -- written by the PC's own writer,
+        # the texture at BOMB_TEX_SIZE (the PC's is 1024).
+        # The GameCube's texture is the 256 x 256 the project's owner made from Bomb_lit.png
+        # (external/bomb/bomb256.png), used as it is; without it, Bomb_lit.png scaled down.
+        own = os.path.join(os.path.dirname(pc["BOMB_LIT"]), "bomb256.png")
+        png, size = (own, None) if os.path.exists(own) else (pc["BOMB_LIT"], BOMB_TEX_SIZE)
+        pc["write_lit_textured"]("SM_Bomb", 220, from_blend(pc["BOMB_TEXTURED"], "Bomb"), png,
+                                 "T_Bomb", "M_Bomb", size=size, basic=pc["BOMB_BASIC_LIT"])
+    else:
+        write_lit_swatched("SM_Bomb", 0, bomb, bomb_colours)
     write_mesh("SM_PlayerBall", 221, simple("Ball", lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.7)),
                lambda k: (0.12, 0.30, 0.95))
     write_mesh("SM_Emerald", 222, simple("Emerald", pc["octahedron"]), lambda k: (0.10, 0.85, 0.95))
