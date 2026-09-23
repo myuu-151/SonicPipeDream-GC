@@ -58,9 +58,9 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
 """),
     # -- ONE stage's data in memory at a time (Screens.lua's LoadStageData), and the pipe's meshes
     # let go with its nodes, so that the menus have the room back
-    ("""    Script.Require("StageData" .. n)
-    self.data = _G["StageData" .. n]
-""", """    self.data = LoadStageData(n)
+    ("""        Script.Require("StageData" .. n)
+        self.data = _G["StageData" .. n]
+""", """        self.data = LoadStageData(n)
 """),
     ("""    for _, p in ipairs(self.pieceNodes or {}) do p.node:Destruct() end
     self.pieceNodes = {}
