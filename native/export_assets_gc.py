@@ -39,7 +39,9 @@ EFFECT_RATE = 22050
 # scripts find the same assets on both machines
 MUSIC = [("ss_intro.wav", "SW_SpecialStage_Intro", 0x51C0FFEE00300001),
          ("ss_loop.wav", "SW_SpecialStage_Loop", 0x51C0FFEE00300002),
-         ("stage1.wav", "SW_SpecialStage_Stage1", 0x51C0FFEE00300003)]
+         ("stage1.wav", "SW_SpecialStage_Stage1", 0x51C0FFEE00300003),
+         ("stage2_open.wav", "SW_SpecialStage_Stage2Intro", 0x51C0FFEE00300004),
+         ("stage2_loop.wav", "SW_SpecialStage_Stage2Loop", 0x51C0FFEE00300005)]
 EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_LoseRings", 0x51C0FFEE00300011),
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),
