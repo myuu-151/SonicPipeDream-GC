@@ -46,8 +46,8 @@ CHANGES = [
 local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     ("    self.camera:SetFar(6000.0)\n", "    self.camera:SetFar(1200.0)\n"),
     # -- each piece node remembers the frames it covers
-    ("            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name }\n",
-     "            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name,\n"
+    ("            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name, frame = piece.first_frame }\n",
+     "            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name, frame = piece.first_frame,\n"
      "                                                      first = piece.first_frame, last = piece.last_frame }\n"),
     # ...and so does each straight of the lead-in laid behind the start: straight k back covers
     # frames -8k to -8k + 8 (a straight is eight frames)
@@ -352,7 +352,14 @@ end
 """),
         # SAVE, the fifth item, is the GameCube's own (export_assets_gc.py adds its art and
         # row): it opens the memory card prompt, SavePrompt.lua.
-        ("""local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false }""",
+        # MARATHON stays shut here: the PC plays one made ahead of time, and this machine has
+        # neither the memory for that nor (yet) the zones built on the fly.
+        ("""-- MARATHON is always open, by the owner's decision for now (it was to wait for the seventh
+-- emerald; StageSelect.lua and Sky.lua still unlock it then, which changes nothing while it is open).
+""", """-- MARATHON is open on the PC; here it stays SHUT (patch_from_pc.py): this machine has neither the
+-- memory for a marathon made ahead of time nor, yet, the zones built on the fly.
+"""),
+        ("""local UNLOCKED = { main_game = true, marathon = true, extras = false, chao_garden = false }""",
          """local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false, save = true }"""),
         # While the save prompt is up the menu shows, but takes no input: the prompt has it.
         ("""    self:ScrollWatermark(deltaTime)
