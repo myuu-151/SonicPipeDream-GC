@@ -21,15 +21,18 @@ CHANGES = [
 -- A basic playable special stage.
 --
 --     A / D      steer left and right round the inside of the pipe
---     Space      jump
+--     Space      jump; again in the air to drop straight back down
+--     Escape     pause: CONTINUE, or EXIT to the stage select
 --     R          start again
 """, """-- SpecialStage.lua (GAMECUBE). Made from the PC repo's script by native/patch_from_pc.py:
 -- change the gameplay THERE and run that again; change only GameCube matters here, in that file.
 -- A basic playable special stage.
 --
 --     stick / d-pad   steer left and right round the inside of the pipe     (A / D on a keyboard)
---     A button        jump                                                  (Space)
---     Start           start again                                           (R)
+--     A button        jump; again in the air to drop straight back down     (Space)
+--     Start           pause: CONTINUE, or EXIT to the stage select          (Escape)
+--
+-- The pad reaches the PC's keys through PadInput.lua; only the steering is given the stick here.
 """),
     # -- less of everything alive at once
     ("local SEE_AHEAD, SEE_BEHIND = 110, 6 ", """local PIECES_AHEAD, PIECES_BEHIND = 72, 12   -- frames of TRACK shown round the player. The PC shows all
@@ -41,6 +44,28 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     ("            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name }\n",
      "            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name,\n"
      "                                                      first = piece.first_frame, last = piece.last_frame }\n"),
+    # ...and so does each straight of the lead-in laid behind the start: straight k back covers
+    # frames -8k to -8k + 8 (a straight is eight frames)
+    ("""            node:SetWorldRotationQuat(Vec(first.quat[1], first.quat[2], first.quat[3], first.quat[4]))
+            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name }
+""", """            node:SetWorldRotationQuat(Vec(first.quat[1], first.quat[2], first.quat[3], first.quat[4]))
+            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name, first = -8 * k, last = -8 * k + 8 }
+"""),
+    # -- ONE stage's data in memory at a time (Screens.lua's LoadStageData), and the pipe's meshes
+    # let go with its nodes, so that the menus have the room back
+    ("""    Script.Require("StageData" .. n)
+    self.data = _G["StageData" .. n]
+""", """    self.data = LoadStageData(n)
+"""),
+    ("""    for _, p in ipairs(self.pieceNodes or {}) do p.node:Destruct() end
+    self.pieceNodes = {}
+""", """    for _, p in ipairs(self.pieceNodes or {}) do p.node:Destruct() end
+    self.pieceNodes = {}
+    self.pieceMeshes = {}
+"""),
+    # -- the readout goes and comes back with the stage (in Leave, then in Enter)
+    ("{ self.player, self.playerShadow, self.uiNode }",
+     "{ self.player, self.playerShadow, self.uiNode, self.debugNode }", 2),
     # -- the HUD is the PC's (SpecialStageUI.lua, copied below). Beside it, one small line of text at
     # the BOTTOM of the screen for the numbers a console build lives by: frame rate, the worst
     # frame of the last half second, how much track is drawn, and free memory.
@@ -49,6 +74,7 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
 """, """    local ui = world:SpawnNode("Canvas")
     ui:SetScript("SpecialStageUI")
     local debug = world:SpawnNode("Canvas")
+    self.debugNode = debug
     debug:SetAnchorMode(AnchorMode.TopLeft)
     debug:SetPosition(0.0, 0.0)
     debug:SetDimensions(640.0, 480.0)
@@ -85,10 +111,9 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
         if (Input.IsGamepadButtonDown(Gamepad.Right)) then want = want - 1.0 end
         want = math.max(-1.0, math.min(1.0, want))
 """),
-    ("    if (Input.IsKeyJustDown(Key.R)) then self:Restart() end\n",
-     "    if (Input.IsKeyJustDown(Key.R) or Input.IsGamepadButtonJustDown(Gamepad.Start)) then self:Restart() end\n"),
-    ("Input.IsKeyJustDown(Key.Space)) then\n        self.rise = JUMP",
-     "(Input.IsKeyJustDown(Key.Space) or Input.IsGamepadButtonJustDown(Gamepad.A))) then\n        self.rise = JUMP"),
+    # (Jumping on A, and pausing on Start, need nothing here: PadInput.lua gives the pad's A to
+    # the PC's Space and its Start to Escape. Start restarted the stage before there was a pause
+    # menu; there is no restart on the pad now, as there is none on the PC's menus.)
     # -- show only the track near the player, and keep the readout
     ("    self:UpdateObjects()\n", """    self:UpdateObjects()
     self:UpdatePieces()
@@ -148,6 +173,37 @@ OTHERS = {
     # USED: medleyFramesPerSecond is a property, the scene file stores the PC's 14, and a stored
     # property beats a default set in Create().
     "Sky.lua": [
+        # THE MENUS, THE LOADING SCREEN AND THE PAD: GameCube-only scripts, loaded at the end of
+        # this one. Screens.lua replaces Sky:ShowMenu -- the menus and a stage are never in
+        # memory together here -- and wraps Sky:Tick; it loads PadInput.lua.
+        ("""function Sky:EditorTick(deltaTime)
+    self:UpdateSky(deltaTime)
+end
+""", """function Sky:EditorTick(deltaTime)
+    self:UpdateSky(deltaTime)
+end
+
+Script.Require("Screens")       -- GAMECUBE: the menus, the loading screen, the pad
+"""),
+        ("function Sky:Create()\n", "Sky.starName = StarName          -- for Screens.lua's Sky:StarFrame\n\nfunction Sky:Create()\n"),
+        # A SKY'S STARS COME IN THE BACKGROUND, AND ONLY AFTER THE LAST SKY'S HAVE GONE. They are
+        # eight 1024 x 1024 frames, 4 MB, held while the sky is up; two skies' worth do not fit.
+        # So a change of sky first lets go of the old frames (the material keeps the one it is
+        # drawing until the new one replaces it), sweeps them out, then asks for the new ones,
+        # which Sky:StarFrame (Screens.lua) hands over as each arrives. The loading screen waits
+        # for them (Sky:StarsReady).
+        ("""    self.starFrames = {}
+    for i = 1, STAR_FRAMES do
+        self.starFrames[i] = LoadAsset(StarName(sky, i))
+    end
+""", """    self.starFrames, self.starAsked, self.window = {}, {}, {}
+    collectgarbage()
+    RefSweep()
+    for i = 1, STAR_FRAMES do
+        self.starAsked[i] = AsyncLoadAsset(StarName(sky, i))
+    end
+"""),
+        ("        local tex = self.starFrames[frame + 1]\n", "        local tex = self:StarFrame(frame + 1)\n"),
         ("local MEDLEY_FRAMES = 384\n",
          "local MEDLEY_EVERY = 1         -- every Nth frame of the PC's show is on the disc\n"
          "local MEDLEY_FRAMES = 384 // MEDLEY_EVERY\n"
@@ -250,25 +306,113 @@ OTHERS = {
         if (dtex ~= nil) then
 """),
     ],
+    # The title menu is the PC's. Built with its stage select already open (coming back from a
+    # stage, Screens.lua), it must start hidden: the PC's never needs to, as its menu is only
+    # ever built at startup, open.
+    "Menu.lua": [
+        ("""    self.built = true
+    self:Refresh()
+    self:Layout()
+end
+""", """    self.built = true
+    self:Refresh()
+    self:Layout()
+    self:Show(self.open)
+end
+"""),
+    ],
+    # The stage select is the PC's, but for its previews. Each is a clip of 16 frames, and the PC
+    # loads all seven stages' clips at once: 112 pictures, 3.5 MB here. So only the stage under
+    # the cursor has its clip in memory. Its still is there at once (all seven stills are held,
+    # 32 KB each); the other frames are asked for in the background once the cursor has rested on
+    # it for a moment -- not for every stage it passes on the way -- and the last stage's are let
+    # go first. The clip plays as its frames arrive.
+    "StageSelect.lua": [
+        ("""    self.previewClip = {}
+    local frames = (MenuLayout ~= nil and MenuLayout.preview_frames) or 1
+    for i = 1, STAGES do
+        self.previewClip[i] = { self.previewTex[i] }
+        for k = 1, frames - 1 do
+            local tex = LoadAsset(string.format("T_Menu_Preview%d_%02d", i, k))
+            if (tex == nil) then break end
+            self.previewClip[i][k + 1] = tex
+        end
+    end
+""", """    self.clipOf, self.clip = nil, {}        -- GAMECUBE: one stage's clip at a time (PlayPreview)
+"""),
+        ("""function StageSelect:PlayPreview(deltaTime)
+    self.previewClock = (self.previewClock or 0.0) + (deltaTime or 0.0)
+    local clip = self.previewClip and self.previewClip[self.index]
+    if (clip == nil or #clip == 0) then return end
+    local fps = (MenuLayout ~= nil and MenuLayout.preview_fps) or 6
+    local frame = math.floor(self.previewClock * fps) % #clip
+    if (frame ~= self.previewFrame) then
+        self.previewFrame = frame
+        self.preview:SetTexture(clip[frame + 1])
+    end
+end
+""", """local CLIP_REST = 0.3                    -- seconds on a stage before its clip is asked for
+
+function StageSelect:PlayPreview(deltaTime)
+    self.previewClock = (self.previewClock or 0.0) + (deltaTime or 0.0)
+    local n = self.index
+    local frames = (MenuLayout ~= nil and MenuLayout.preview_frames) or 1
+    if (self.clipOf ~= n) then
+        -- another stage: the last one's frames go now, this one's still goes up at once
+        self.clipOf, self.clip, self.clipAsked = n, {}, false
+        self.landedAt = self.previewClock
+        self.previewFrame = -1
+    end
+    if (not self.clipAsked and self.previewClock - self.landedAt >= CLIP_REST) then
+        self.clipAsked = true
+        collectgarbage()
+        RefSweep()
+        for k = 1, frames - 1 do
+            local name = string.format("T_Menu_Preview%d_%02d", n, k)
+            self.clip[k] = { name = name, asked = AsyncLoadAsset(name) }
+        end
+    end
+    local fps = (MenuLayout ~= nil and MenuLayout.preview_fps) or 6
+    local frame = math.floor(self.previewClock * fps) % frames
+    if (frame == self.previewFrame) then return end
+    local tex = self.previewTex[n]
+    if (frame > 0) then
+        local c = self.clip[frame]
+        if (c ~= nil and c.tex == nil and c.asked:IsLoaded()) then c.tex = LoadAsset(c.name) end
+        tex = c and c.tex
+        -- not here yet: the picture on screen stays (it is this stage's), and this is tried again
+        if (tex == nil and self.previewFrame >= 0) then return end
+        tex = tex or self.previewTex[n]
+    end
+    self.previewFrame = frame
+    self.preview:SetTexture(tex)
+end
+"""),
+    ],
 }
+
+
+def patch(name, text, changes):
+    """Each change is (old, new) or (old, new, count): old must be there, count times."""
+    for n, change in enumerate(changes):
+        old, new = change[0], change[1]
+        count = change[2] if len(change) > 2 else 1
+        if text.count(old) < count:
+            raise SystemExit("%s: change %d no longer fits the PC script:\n%s" % (name, n + 1, old[:300]))
+        text = text.replace(old, new, count)
+    return text
 
 
 def main():
     for name, changes in OTHERS.items():
         text = open(os.path.join(os.path.dirname(SRC), name), encoding="utf-8", newline="").read().replace("\r\n", "\n")
-        for old, new in changes:
-            if old not in text:
-                raise SystemExit("%s: a change no longer fits the PC script:\n%s" % (name, old))
-            text = text.replace(old, new, 1)
+        text = patch(name, text, changes)
         open(os.path.join(os.path.dirname(OUT), name), "w", encoding="utf-8", newline="\n").write(
             "-- FROM the PC repo, by native/patch_from_pc.py. Change it there.\n" + text)
     s = open(SRC, encoding="utf-8", newline="").read().replace("\r\n", "\n")
-    for n, (old, new) in enumerate(CHANGES):
-        if old not in s:
-            raise SystemExit("change %d no longer fits the PC script:\n%s" % (n + 1, old[:200]))
-        s = s.replace(old, new, 1)
+    s = patch("SpecialStage.lua", s, CHANGES)
     open(OUT, "w", encoding="utf-8", newline="\n").write(s)
-    print("wrote %s (%d changes)" % (OUT, len(CHANGES)))
+    print("wrote %s (%d changes) and %s" % (OUT, len(CHANGES), ", ".join(OTHERS)))
 
 
 if __name__ == "__main__":

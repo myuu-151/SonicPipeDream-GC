@@ -233,8 +233,10 @@ def main():
         slots = [m.name.split(".")[0] if m else "" for m in p["mesh"].materials]
         colours = [colours_of.get(n, (1.0, 0.0, 1.0)) for n in slots]
         glossy = [n in pc["GLOSSY_SLOTS"] for n in slots]
+        # the pipe's check of two shades, the PC's own pattern (export_to_octave.py's checkers())
+        checker = pc["checkers"](STAGE, p["mesh"].name, slots)
         write_mesh("SM_Piece_%s_P%d" % (piece, STAGE), 16 * STAGE + i, p["mesh"], lambda k, c=colours: c[k],
-                   material="M_StageMatte", keep_slot=lambda k, g=glossy: not g[k])
+                   material="M_StageMatte", keep_slot=lambda k, g=glossy: not g[k], colour_of_face=checker)
         write_painted_gloss("SM_Piece_%s_Gloss_P%d" % (piece, STAGE), 16 * STAGE + 8 + i, p["mesh"],
                             lambda k, c=colours: c[k], lambda k, g=glossy: g[k], piece_path[piece])
         print("  piece %-12s %5d triangles" % (piece, triangles(p["mesh"])))
@@ -291,7 +293,11 @@ def main():
         angle_00_side=-1 if rm.ANGLE_00_SIDE == "right" else 1,
         arch=dict(rings=arch["rings"], reach=rm.PIPE_RADIUS + 1.6, from_deg=12.0, ring_scale=arch["ring_scale"],
                   toward_player=0.72, steps_per_second=arch["steps_per_second"]),
-        sky=0, palette=STAGE, palette_skies=[0] * 7, pieces=piece_list, sections=sections, path=path_list)
+        # the stage's own sky, as on the PC (stage_palettes.py's SKY): all eight are on the disc,
+        # streamed (export_assets_gc.py's skies())
+        sky=palette["sky"], palette=STAGE,
+        palette_skies=[stage_palettes.palette(n)["sky"] for n in sorted(stage_palettes.S2_LINE)],
+        pieces=piece_list, sections=sections, path=path_list)
     out = os.path.join(PROJ, "Scripts", "StageData%d.lua" % STAGE)
     open(out, "w", encoding="ascii", newline="\n").write(
         "-- Written by native/export_gc.py from the PC repo's %s.json. Do not edit by hand.\n"

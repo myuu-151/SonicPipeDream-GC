@@ -3,8 +3,10 @@
 -- A basic playable special stage.
 --
 --     stick / d-pad   steer left and right round the inside of the pipe     (A / D on a keyboard)
---     A button        jump                                                  (Space)
---     Start           start again                                           (R)
+--     A button        jump; again in the air to drop straight back down     (Space)
+--     Start           pause: CONTINUE, or EXIT to the stage select          (Escape)
+--
+-- The pad reaches the PC's keys through PadInput.lua; only the steering is given the stick here.
 --
 -- Sonic runs forward by himself, as in the original: the player only ever moves ROUND the
 -- pipe. And he can keep going -- up the wall, over the top, down the other side, round
@@ -33,12 +35,52 @@ SpecialStage = {}
 local TWO_PI = math.pi * 2.0
 
 -- How it feels. Frames are the track's own unit: 8 to a straight piece.
+local LAST_STAGE = 7            -- the gauntlet: StageData1..7, each with its own palette and emerald
+
 local SPEED = 15.0              -- frames a second, forward. The original never lets you change it.
 local STEER = 150.0             -- 256ths of a circle a second, at full tilt: round the pipe in 1.7 s
 local STEER_GRIP = 9.0          -- how fast steering speed is reached and lost
+-- Momentum: keep the direction held and he winds up past STEER, faster and faster round the
+-- pipe, to STEER_MAX; let go and it bleeds off at STEER_COAST rather than stopping dead
+local STEER_BUILD = 160.0       -- 256ths a second a second, once he is at STEER and still holding: the
+                                -- first loop round is the speeding up, the second is at STEER_MAX
+local STEER_MAX = 320.0         -- round the pipe in 0.8 s
+local STEER_COAST = 2.5         -- how fast the wound-up speed is lost with the direction let go
 local SLIDE = 55.0              -- hands off, he slides back down toward the floor, this hard
-local JUMP = 16.0               -- off the surface, units a second
-local GRAVITY = 42.0            -- back onto it
+-- The jump is S2's: he leaves the surface as a ball and FLIES, straight, under gravity,
+-- across the pipe's section. Off the floor it is a stiff high hop; off the wall it throws
+-- him across to land on the other side, spinning as he goes. His way ROUND the pipe is kept
+-- separate: it goes on as steering in the air (held, or coasting off), the whole section
+-- turning under him, so a jump while running round is still a full jump.
+local JUMP = 50.0               -- off the surface, units a second, once the push has built: 9.6 units up a
+                                -- 10 unit pipe, the ball's middle well past its axis at the top of the hop
+local JUMP_START = 0.4          -- of that at the instant he leaves; the rest builds over JUMP_RAMP seconds,
+local JUMP_RAMP = 0.12          -- a weighted bounce off the surface rather than a flick
+local GRAVITY = 110.0           -- units a second a second, toward the floor, off the floor: up and down
+                                -- in 0.87 s. Off the wall the flight is softer, the throw across slower:
+local WALL_GRAVITY = 80.0       -- this, at the wall gone vertical, and in between in between; and the push
+local WALL_PUSH = 0.9           -- off it only this much of JUMP, so it is the swing (AIR_PULL) that carries
+                                -- him across, at its own pace, not the throw
+local AIR_COAST = 0.8           -- a second: with the direction let go, his run round the pipe carries on
+                                -- through the flight, losing only this much (STEER_COAST on the ground)
+local AIR_PULL = 450.0          -- 256ths a second a second, times sin(angle): and gravity swings him round
+                                -- toward the floor as he flies, the section turning under him -- the slide
+                                -- down the wall of a jump let go of
+-- Near the centre line none of that: a jump from level ground goes straight up and comes
+-- straight down. (The surface's normal there leans toward the axis, and with the swing on top
+-- a hop from a hair to one side crossed the axis and came down swinging on the other.)
+local LEVEL = 12.0              -- within this (256ths) of the centre line it is a plain hop...
+local LEVEL_BLEND = 24.0        -- ...and by here it is the full thing
+-- The slide (hands let go, gravity taking him down the wall) carries into a jump from up the
+-- wall: it is what arcs him down across to the other side instead of level into its lip. But
+-- carried from near the centre it twirls him, so it is kept out of a hop from there:
+local CARRY_FROM = 24.0         -- none of the slide carried within this (256ths) of the centre line...
+local CARRY_FULL = 44.0         -- ...all of it from here up the wall
+local FALL_ANGLE = 64.0         -- past here (256ths; 64 is the wall gone vertical) the surface overhangs:
+local CLING = 0.45              -- with the steering let go he keeps his feet this long, then falls off it
+local FALL_TURN = 0.25          -- seconds to swing from feet-on-the-wall to upright as the fall starts
+local DIVE = 45.0               -- jump again in the air: straight back down onto the pipe, units a second
+local BALL_SPIN = 12.0          -- radians a second: two turns a second in the air
 local REACH_FRAMES = 0.55       -- a hit: within this far along the track...
 local REACH_ANGLE = 11.0        -- ...this far round it (256ths)...
 local REACH_HEIGHT = 2.6        -- ...and no higher off the surface than this
@@ -71,12 +113,25 @@ local PIECES_AHEAD, PIECES_BEHIND = 72, 12   -- frames of TRACK shown round the 
                                         -- 121 pieces and lets the engine cull; here a piece is up to
                                         -- 21,000 triangles and the far ones are not worth a draw call
 local SEE_AHEAD, SEE_BEHIND = 72, 6    -- frames of rings and bombs kept alive round the player
-local START_HOLD = 2.0          -- seconds standing at the start while START plays
+local START_HOLD = 4.5          -- seconds running up the lead-in at the start while START plays (2.5 s)
 local SONIC_FPS = 42.0          -- his animations were made at 24 frames a second, but at the speed
                                 -- he covers the track that reads as a jog: played faster, by eye
 local SONIC_FRAMES = 16         -- in a run cycle
 local THUMBS_TIME = 2.8         -- seconds of thumbs-up running after a check is passed. The ring
                                 -- check leaves 44 empty frames past the arch: 2.9 s at this speed.
+-- THE INTRO. While START is on the screen and he runs on the spot, the camera goes once right
+-- round him: away behind, down his side, low across his front looking up at him, and round
+-- back up into its place as he sets off.
+local INTRO_TIME = START_HOLD   -- seconds: the whole of the hold
+local LEAD_PIECES = 10          -- straights laid BEHIND the start for him to run up during it: he sets
+                                -- off from START_HOLD seconds back up the track and reaches its
+                                -- proper start as the hold ends (10 x 8 frames > 4.5 s x 15 a second)
+local INTRO_RADIUS = 6.5        -- how far from him. It has to stay INSIDE the pipe all the way round:
+                                -- beside him the wall is only 2.4 up at this distance out
+local INTRO_LOW = -1.0          -- how far below his chest at the front of the sweep (a low angle, looking up)
+local INTRO_HIGH = 3.5          -- and how far above it round the back and sides
+local INTRO_IN = 1.3            -- seconds to ease out of the ordinary camera into the circuit, softly:
+local INTRO_OUT = 0.9           -- no speed at either end of the move (smootherstep, below); and back
 local ORBIT_TIME = 0.75         -- of that, seconds the camera takes to swing round to his front, and back
 local ORBIT_RADIUS = 6.5        -- how far from him it orbits. It has to stay INSIDE the pipe: at 11 the
                                 -- camera was through the wall (which is about 8 out at that height) and
@@ -91,6 +146,7 @@ local BALL_RADIUS = 1.7
 -- ------------------------------------------------------------------ small vector maths
 local function Add(a, b) return { a[1] + b[1], a[2] + b[2], a[3] + b[3] } end
 local function Scale(a, k) return { a[1] * k, a[2] * k, a[3] * k } end
+local function Dot(a, b) return a[1] * b[1] + a[2] * b[2] + a[3] * b[3] end
 local function Cross(a, b)
     return { a[2] * b[3] - a[3] * b[2], a[3] * b[1] - a[1] * b[3], a[1] * b[2] - a[2] * b[1] }
 end
@@ -152,6 +208,12 @@ end
 -- The centre line at a (fractional) frame: where the floor is, forward, up.
 function SpecialStage:TrackAt(frame)
     local path = self.data.path
+    if (frame < 0.0) then
+        -- the lead-in: straight back from the start along its own heading, a frame a step
+        local a, b = path[1], path[2]
+        local pos = { a[1] + (b[1] - a[1]) * frame, a[2] + (b[2] - a[2]) * frame, a[3] + (b[3] - a[3]) * frame }
+        return pos, Normalize({ a[4], a[5], a[6] }), Normalize({ a[7], a[8], a[9] })
+    end
     local f = math.max(0.0, math.min(frame, #path - 1.001))
     local i = math.floor(f)
     local t = f - i
@@ -164,6 +226,41 @@ end
 
 -- (frame, angle, height off the pipe's surface) -> a place, and which way is "up" there:
 -- toward the pipe's axis, so things stand square to the bit of pipe under them.
+-- Off the surface where he stands, into the air: he becomes a point in the pipe's section,
+-- (cx, cy) from its axis, cy up, the floor at cy = -radius, pushed away from the surface at
+-- `push` (a jump; the rest of the push builds in Tick) or simply let go of (a fall, push 0).
+function SpecialStage:LeaveSurface(push, held)
+    local radius = self.data.pipe_radius
+    local t = self.data.angle_00_side * self.angle * TWO_PI / 256.0
+    local r = radius - 0.05                 -- a hair inside, so he is not "landed" again next tick
+    self.cx, self.cy = r * math.sin(t), -r * math.cos(t)
+    -- the push's direction: away from the surface, but straight up from level ground
+    local k = math.max(0.0, math.min(1.0, (math.abs(self.angle) - LEVEL) / (LEVEL_BLEND - LEVEL)))
+    local nx, ny = -math.sin(t) * k, (1.0 - k) + math.cos(t) * k
+    local n = math.sqrt(nx * nx + ny * ny)
+    self.nx, self.ny = nx / n, ny / n
+    self.level = 1.0 - k                                      -- how much of a plain hop this is
+    -- a HELD direction carries into the air whole; the slide of hands let go only from up
+    -- the wall (CARRY_FROM .. CARRY_FULL)
+    if (not held) then
+        self.steer = self.steer * math.max(0.0, math.min(1.0, (math.abs(self.angle) - CARRY_FROM) / (CARRY_FULL - CARRY_FROM)))
+    end
+    local wall = math.min(1.0, math.abs(math.sin(t)))         -- 0 on the floor, 1 at the vertical wall
+    push = push * (1.0 + (WALL_PUSH - 1.0) * wall)
+    self.vx, self.vy = self.nx * push * JUMP_START, self.ny * push * JUMP_START
+    self.push, self.ramp = push * (1.0 - JUMP_START), 0.0     -- what is still to come, and how far along
+    self.gravity = GRAVITY + (WALL_GRAVITY - GRAVITY) * wall
+    self.height = radius - r
+    self.falling = (push <= 0.0)
+    self.diving, self.cling, self.fallTime = false, 0.0, 0.0
+end
+
+function SpecialStage:WrapAngle(angle)
+    if (angle > 128.0) then return angle - 256.0 end        -- over the top and on
+    if (angle < -128.0) then return angle + 256.0 end
+    return angle
+end
+
 function SpecialStage:Place(frame, angle, height)
     local pos, fwd, up = self:TrackAt(frame)
     local left = Cross(up, fwd)
@@ -183,18 +280,24 @@ local function SpawnMesh(world, mesh)
 end
 
 function SpecialStage:Create()
+    -- The gauntlet is stages 1-7 in order. S2_STAGE starts somewhere else, for testing.
     self.stage = 1
+    if (os ~= nil and os.getenv ~= nil) then
+        local pick = tonumber(os.getenv("S2_STAGE") or "")
+        if (pick ~= nil and pick >= 1 and pick <= LAST_STAGE) then self.stage = math.floor(pick) end
+    end
     self.built = false
+    TheSpecialStage = self          -- so the stage select can say which stage to build
 end
 
 function SpecialStage:GatherProperties()
     return { { name = "stage", type = DatumType.Integer } }
 end
 
+-- Build is the things that outlive a stage: the meshes, the light, Sonic, the camera, the
+-- UI and the music. LoadStage is the stage itself, and can be called again for the next one.
 function SpecialStage:Build()
     local world = self:GetWorld()
-    Script.Require("StageData" .. self.stage)
-    self.data = _G["StageData" .. self.stage]
 
     self.meshRing = LoadAsset("SM_Ring")
     -- the ring, turned a little further in each: half a turn in all, which is a whole one to look at
@@ -204,6 +307,93 @@ function SpecialStage:Build()
     end
     self.ringStep = 0
     self.meshBomb = LoadAsset("SM_Bomb")
+
+    -- The light, for the glossy things only (the pipe is unlit and carries its own shading).
+    -- The light. The meshes carry their colours but not their shading: a sun from above and a
+    -- little ahead, so the spheres catch a highlight. It is GENTLE on purpose -- ambient and sun
+    -- add up to about 1, so the pipe keeps the colour it was given instead of burning out to
+    -- white, which the first, brighter setting did.
+    local sun = world:SpawnNode("DirectionalLight3D")
+    sun:SetName("StageSun")
+    sun:SetDirection(Vec(0.35, -1.0, -0.25))
+    sun:SetColor(Vec(1.0, 0.98, 0.94, 1.0))
+    sun:SetIntensity(0.45)
+    world:SetAmbientLightColor(Vec(0.62, 0.62, 0.66, 1.0))
+
+    self.meshBall = LoadAsset("SM_PlayerBall")
+    self.meshSparkle, self.meshBoom = LoadAsset("SM_FxQuad"), LoadAsset("SM_FxQuadBoom")
+    self.boomMaterial, self.boomTextures, self.boomFrame = LoadAsset("M_Explosion"), {}, -1
+    for i = 0, BOOM_FRAMES - 1 do self.boomTextures[i] = LoadAsset("T_Explosion_" .. i) end
+    self.meshShadow = LoadAsset("SM_Shadow")
+    if (self.meshShadow ~= nil) then
+        self.playerShadow = SpawnMesh(world, self.meshShadow)
+    end
+    self.sonicRun, self.sonicThumbs = {}, {}
+    for i = 0, SONIC_FRAMES - 1 do
+        self.sonicRun[i] = LoadAsset(string.format("SM_Sonic_Run_%02d", i))
+        self.sonicThumbs[i] = LoadAsset(string.format("SM_Sonic_Thumbs_%02d", i))
+    end
+    self.sonicIdle = LoadAsset("SM_Sonic_Idle_00")
+    self.player = SpawnMesh(world, self.sonicIdle or self.meshBall)
+    self.playerMesh = nil
+
+    self.camera = world:GetActiveCamera()
+    if (self.camera == nil) then
+        self.camera = world:SpawnNode("Camera3D")
+        world:SetActiveCamera(self.camera)
+    end
+    self.camera:SetFar(1200.0)
+
+    local ui = world:SpawnNode("Canvas")
+    ui:SetScript("SpecialStageUI")
+    local debug = world:SpawnNode("Canvas")
+    self.debugNode = debug
+    debug:SetAnchorMode(AnchorMode.TopLeft)
+    debug:SetPosition(0.0, 0.0)
+    debug:SetDimensions(640.0, 480.0)
+    self.readout = debug:CreateChild("Text")
+    self.readout:SetAnchorMode(AnchorMode.TopLeft)
+    self.readout:SetPosition(28.0, 440.0)
+    self.readout:SetTextSize(14.0)
+    self.readout:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
+    self.readout:SetText("...")
+    -- where the frame went (System.GetPerfReport): the average, and the worst frame, in ms
+    self.perfLines = {}
+    for i = 1, 2 do
+        local line = debug:CreateChild("Text")
+        line:SetAnchorMode(AnchorMode.TopLeft)
+        line:SetPosition(28.0, 396.0 + 14.0 * i)
+        line:SetTextSize(12.0)
+        line:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
+        line:SetText("")
+        self.perfLines[i] = line
+    end
+    self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
+    self.uiNode = ui                -- kept so the HUD can be hidden when the stage is left
+
+    -- the music: its script only needs to be on some node, and nothing in the scene has it
+    local music = world:SpawnNode("Node3D")
+    music:SetName("SpecialStageMusic")
+    music:SetScript("SpecialStageMusic")
+
+    self.built = true
+    self:LoadStage(self.stage)
+end
+
+-- ------------------------------------------------------------------ a stage
+-- Everything a stage owns, and nothing a stage does not: called once at startup and again
+-- for each stage of the gauntlet. Whatever the last stage spawned is destroyed first.
+function SpecialStage:LoadStage(n)
+    local world = self:GetWorld()
+    self:ClearStage()
+    self.stage = n
+    self.data = LoadStageData(n)
+    if (self.data == nil) then          -- a build that ships fewer stages than seven
+        self.stage = 1
+        Script.Require("StageData1")
+        self.data = _G["StageData1"]
+    end
+
     self.meshRainbow = {}
     for i = 0, self.data.arch.rings - 1 do self.meshRainbow[i] = LoadAsset("SM_RingRainbow_" .. i) end
 
@@ -223,18 +413,19 @@ function SpecialStage:Build()
                                                       first = piece.first_frame, last = piece.last_frame }
         end
     end
-
-    -- The light, for the glossy things only (the pipe is unlit and carries its own shading).
-    -- The light. The meshes carry their colours but not their shading: a sun from above and a
-    -- little ahead, so the spheres catch a highlight. It is GENTLE on purpose -- ambient and sun
-    -- add up to about 1, so the pipe keeps the colour it was given instead of burning out to
-    -- white, which the first, brighter setting did.
-    local sun = world:SpawnNode("DirectionalLight3D")
-    sun:SetName("StageSun")
-    sun:SetDirection(Vec(0.35, -1.0, -0.25))
-    sun:SetColor(Vec(1.0, 0.98, 0.94, 1.0))
-    sun:SetIntensity(0.45)
-    world:SetAmbientLightColor(Vec(0.62, 0.62, 0.66, 1.0))
+    -- and the lead-in behind the start: the first piece (a straight: every level opens on
+    -- them) laid again and again back along its own heading
+    local first = self.data.pieces[1]
+    local a, b = self.data.path[1], self.data.path[9]                -- one straight is eight frames
+    for k = 1, LEAD_PIECES do
+        for _, name in ipairs({ first.mesh, first.gloss }) do
+            local node = SpawnMesh(world, self:PieceMesh(name, self.palette))
+            node:SetWorldPosition(Vec(first.pos[1] - (b[1] - a[1]) * k, first.pos[2] - (b[2] - a[2]) * k,
+                                      first.pos[3] - (b[3] - a[3]) * k))
+            node:SetWorldRotationQuat(Vec(first.quat[1], first.quat[2], first.quat[3], first.quat[4]))
+            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name, first = -8 * k, last = -8 * k + 8 }
+        end
+    end
 
     -- every ring and bomb in one list, in the order they are met
     self.objects = {}
@@ -244,7 +435,9 @@ function SpecialStage:Build()
         end
     end
     table.sort(self.objects, function(a, b) return a.frame < b.frame end)
-    self.pool = {}                  -- StaticMesh3D nodes not in use
+    -- StaticMesh3D nodes not in use. It OUTLIVES a stage: a ring is a ring in all seven, so
+    -- the next stage takes the same nodes back out of it rather than spawning its own.
+    self.pool = self.pool or {}
 
     -- the rainbow arch over each check
     self.arches = {}
@@ -281,65 +474,71 @@ function SpecialStage:Build()
     self.emerald:SetWorldPosition(ToVec(where))
     self.emerald:SetWorldRotationQuat(FacingQuat(emeraldFwd, emeraldUp))
 
-    self.meshBall = LoadAsset("SM_PlayerBall")
-    self.meshSparkle, self.meshBoom = LoadAsset("SM_FxQuad"), LoadAsset("SM_FxQuadBoom")
-    self.boomMaterial, self.boomTextures, self.boomFrame = LoadAsset("M_Explosion"), {}, -1
-    for i = 0, BOOM_FRAMES - 1 do self.boomTextures[i] = LoadAsset("T_Explosion_" .. i) end
-    self.meshShadow = LoadAsset("SM_Shadow")
-    if (self.meshShadow ~= nil) then
-        self.playerShadow = SpawnMesh(world, self.meshShadow)
-    end
-    self.sonicRun, self.sonicThumbs = {}, {}
-    for i = 0, SONIC_FRAMES - 1 do
-        self.sonicRun[i] = LoadAsset(string.format("SM_Sonic_Run_%02d", i))
-        self.sonicThumbs[i] = LoadAsset(string.format("SM_Sonic_Thumbs_%02d", i))
-    end
-    self.sonicIdle = LoadAsset("SM_Sonic_Idle_00")
-    self.player = SpawnMesh(world, self.sonicIdle or self.meshBall)
-    self.playerMesh = nil
-
-    self.camera = world:GetActiveCamera()
-    if (self.camera == nil) then
-        self.camera = world:SpawnNode("Camera3D")
-        world:SetActiveCamera(self.camera)
-    end
-    self.camera:SetFar(1200.0)
-
-    local ui = world:SpawnNode("Canvas")
-    ui:SetScript("SpecialStageUI")
-    local debug = world:SpawnNode("Canvas")
-    debug:SetAnchorMode(AnchorMode.TopLeft)
-    debug:SetPosition(0.0, 0.0)
-    debug:SetDimensions(640.0, 480.0)
-    self.readout = debug:CreateChild("Text")
-    self.readout:SetAnchorMode(AnchorMode.TopLeft)
-    self.readout:SetPosition(28.0, 440.0)
-    self.readout:SetTextSize(14.0)
-    self.readout:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
-    self.readout:SetText("...")
-    -- where the frame went (System.GetPerfReport): the average, and the worst frame, in ms
-    self.perfLines = {}
-    for i = 1, 2 do
-        local line = debug:CreateChild("Text")
-        line:SetAnchorMode(AnchorMode.TopLeft)
-        line:SetPosition(28.0, 396.0 + 14.0 * i)
-        line:SetTextSize(12.0)
-        line:SetColor(Vec(1.0, 1.0, 0.2, 1.0))
-        line:SetText("")
-        self.perfLines[i] = line
-    end
-    self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
-
-    -- the music: its script only needs to be on some node, and nothing in the scene has it
-    local music = world:SpawnNode("Node3D")
-    music:SetName("SpecialStageMusic")
-    music:SetScript("SpecialStageMusic")
-
     -- the sky that goes with this stage's colours (stage_palettes.py's SKY). Sky.lua picks
     -- up a change of `sky` on its next tick.
     if (TheSky ~= nil and self.data.sky ~= nil) then TheSky.sky = self.data.sky end
-    self.built = true
     self:Restart()
+end
+
+-- What LoadStage spawned, taken down again. The pooled ring and bomb nodes are NOT destroyed:
+-- their meshes are the same in every stage, so the next one reuses them.
+function SpecialStage:ClearStage()
+    for _, p in ipairs(self.pieceNodes or {}) do p.node:Destruct() end
+    self.pieceNodes = {}
+    self.pieceMeshes = {}
+    for _, rings in ipairs(self.arches or {}) do
+        for _, node in pairs(rings) do node:Destruct() end
+    end
+    self.arches = {}
+    for _, o in ipairs(self.objects or {}) do
+        if (o.node ~= nil) then self:Release(o) end
+    end
+    self.objects = {}
+    if (self.emerald ~= nil) then self.emerald:Destruct() end
+    self.emerald = nil
+end
+
+-- ------------------------------------------------------------------ coming and going
+-- The emerald ends the stage: it is won, and the stage select comes back with that emerald
+-- in colour. One stage does not run into the next -- you choose the next one yourself.
+function SpecialStage:Finish()
+    local won = self.stage
+    self:Leave()
+    if (self.onFinished ~= nil) then self.onFinished(won) end
+end
+
+-- Put the stage away: everything it spawned goes, and what it keeps is hidden. The world
+-- is left as it was before the stage started -- the sky, and a menu over it.
+function SpecialStage:Leave()
+    self.active = false
+    self.paused = false
+    if (self.uiReady) then TheSpecialStageUI:ShowPause(false, 1) end
+    self:ClearStage()
+    for _, node in ipairs({ self.player, self.playerShadow, self.uiNode, self.debugNode }) do
+        if (node ~= nil) then node:SetVisible(false) end
+    end
+    for _, fx in ipairs(self.fx or {}) do fx.node:SetVisible(false) end
+    if (TheSpecialStageMusic ~= nil and TheSpecialStageMusic.Stop ~= nil) then
+        TheSpecialStageMusic:Stop()
+    end
+end
+
+-- And back in, at whichever stage was chosen.
+function SpecialStage:Enter(n)
+    self.active = true
+    for _, node in ipairs({ self.player, self.playerShadow, self.uiNode, self.debugNode }) do
+        if (node ~= nil) then node:SetVisible(true) end
+    end
+    self:LoadStage(n or self.stage)
+    if (TheSpecialStageMusic ~= nil and TheSpecialStageMusic.Restart ~= nil) then
+        TheSpecialStageMusic:Restart()
+    end
+end
+
+function SpecialStage:SetPaused(paused)
+    self.paused = paused
+    self.pauseIndex = 1
+    if (self.uiReady) then TheSpecialStageUI:ShowPause(paused, 1) end
 end
 
 function SpecialStage:Restart()
@@ -347,19 +546,35 @@ function SpecialStage:Restart()
         o.taken = false
         if (o.node ~= nil) then self:Release(o) end
     end
-    self.frame = 0.0
+    self.frame = -SPEED * START_HOLD    -- back up the lead-in: at the start proper as START scatters
     self.angle = 0.0                -- 0 is the floor's centre line; it wraps at +-128
     self.steer = 0.0
     self.height = 0.0               -- off the pipe's surface
-    self.rise = 0.0
+    self.cx, self.cy = 0.0, 0.0     -- in the air: where he is in the pipe's section, and
+    self.vx, self.vy = 0.0, 0.0     -- how he is moving through it
+    self.nx, self.ny = 0.0, 1.0     -- which way the jump pushed him, and how much of the push
+    self.push, self.ramp = 0.0, 0.0 -- is still building (LeaveSurface)
+    self.gravity = GRAVITY          -- the pull down through this flight, softer for a throw off the wall
+    self.level = 1.0                -- 1 for a plain hop off level ground, 0 for a throw off the wall
+    self.spin = 0.0
+    self.cling = 0.0                -- how long he has hung on up the overhang with the steering let go
+    self.falling = false            -- in the air because he let go up there, on his feet, not as the ball
+    self.fallTime = 0.0             -- how long he has been in the air
+    self.diving = false             -- jumped again in the air: dropping straight back down
     self.rings = 0
     -- For testing the checks without playing to them: set S2_TEST_RINGS in the environment.
+    self.autoplay = (os ~= nil and os.getenv ~= nil and os.getenv("S2_AUTOPLAY") ~= nil)
+    if (os ~= nil and os.getenv ~= nil and os.getenv("S2_AUTOJUMP") ~= nil) then
+        self.testJump = tonumber(os.getenv("S2_AUTOJUMP"))
+        self.testLog = true
+    end
     if (os ~= nil and os.getenv ~= nil and os.getenv("S2_TEST_RINGS") ~= nil) then
         self.rings = tonumber(os.getenv("S2_TEST_RINGS")) or 0
     end
     self.section = 1
     self.stun = 0.0
     self.hold = START_HOLD
+    self.intro = INTRO_TIME         -- > 0: the camera is going round him while START is up
     self.over = -1.0                -- >= 0: the stage has ended, and this is the countdown to starting again
     self.spin = 0.0
     self.thumbs = 0.0               -- > 0: running with the thumb up
@@ -574,13 +789,16 @@ function SpecialStage:PassChecks(fromFrame)
             self.emerald:SetVisible(false)
             self.over = 5.0
             if (self.uiReady) then TheSpecialStageUI:ShowBanner("EMERALD GET !", 4.5) end
+            -- Won, and remembered: the stage select shows it in colour from now on, this
+            -- session and the next.
+            if (TheStageSelect ~= nil) then TheStageSelect:SetWon(self.stage, true) end
         end
         self.section = self.section + 1
     else
         self.over = 3.5
         self.failed = true
         self:Sound("Fail")
-        if (self.uiReady) then TheSpecialStageUI:ShowTooBad() end
+        if (self.uiReady) then TheSpecialStageUI:ShowBanner("NOT ENOUGH RINGS", 3.2) end
     end
 end
 
@@ -590,6 +808,10 @@ function SpecialStage:UpdateUI()
         TheSpecialStageUI.demo = false
         TheSpecialStageUI:ShowStart()
         self.uiReady = true
+        if (self.announce ~= nil) then
+            TheSpecialStageUI:ShowBanner("STAGE " .. self.announce, 2.5)
+            self.announce = nil
+        end
     end
     local section = self.data.sections[math.min(self.section, #self.data.sections)]
     TheSpecialStageUI:SetRings(self.rings)
@@ -631,12 +853,76 @@ end
 
 local PALETTE_KEYS = { Key.N1, Key.N2, Key.N3, Key.N4, Key.N5, Key.N6, Key.N7 }
 
+-- ------------------------------------------------------------------ the autopilot
+-- For the stage select's previews (native/make_stage_previews.py): with S2_AUTOPLAY set the
+-- stage plays itself, steering for the nearest ring ahead and round any bomb in the way.
+local PILOT_LOOK = 14.0         -- frames ahead it looks for a ring
+local PILOT_DODGE = 18.0        -- 256ths: a bomb this close to his line, this near, is steered round
+local PILOT_NEAR = 9.0          -- frames
+
+function SpecialStage:Pilot()
+    local target, bomb = nil, nil
+    for _, o in ipairs(self.objects) do
+        if (o.frame > self.frame + PILOT_LOOK) then break end
+        if (not o.taken and o.frame > self.frame) then
+            if (o.bomb) then
+                if (bomb == nil and o.frame < self.frame + PILOT_NEAR and AngleBetween(o.angle, self.angle) < PILOT_DODGE) then
+                    bomb = o
+                end
+            elseif (target == nil) then
+                target = o
+            end
+        end
+    end
+    local d = 0.0
+    if (bomb ~= nil) then
+        d = self.angle - bomb.angle                             -- away from it
+        if (d > 128.0) then d = d - 256.0 elseif (d < -128.0) then d = d + 256.0 end
+        if (math.abs(d) < 1.0) then d = 1.0 end
+    elseif (target ~= nil) then
+        d = target.angle - self.angle                           -- toward it
+        if (d > 128.0) then d = d - 256.0 elseif (d < -128.0) then d = d + 256.0 end
+        if (math.abs(d) < 2.0) then d = 0.0 end
+    end
+    if (d == 0.0) then return 0.0 end
+    return (d > 0.0) and 1.0 or -1.0
+end
+
 -- ------------------------------------------------------------------ every frame
 function SpecialStage:Tick(deltaTime)
     if (not self.built) then self:Build() end
+    if (self.active == false) then return end       -- put away; the menu has the screen
     local dt = math.min(deltaTime, 0.05)
 
-    if (Input.IsKeyJustDown(Key.R) or Input.IsGamepadButtonJustDown(Gamepad.Start)) then self:Restart() end
+    -- paused: nothing moves; Up and Down pick CONTINUE or EXIT, Enter takes it, Escape continues
+    if (self.paused) then
+        if (Input.IsKeyJustDown(Key.Up) or Input.IsKeyJustDown(Key.W)
+                or Input.IsKeyJustDown(Key.Down) or Input.IsKeyJustDown(Key.S)) then
+            self.pauseIndex = 3 - self.pauseIndex
+            self:Sound("MenuMove")
+            if (self.uiReady) then TheSpecialStageUI:ShowPause(true, self.pauseIndex) end
+        end
+        if (Input.IsKeyJustDown(Key.Escape)) then
+            self:SetPaused(false)
+        elseif (Input.IsKeyJustDown(Key.Enter) or Input.IsKeyJustDown(Key.Space)) then
+            if (self.pauseIndex == 1) then
+                self:SetPaused(false)
+            else
+                self:Sound("MenuWarp")
+                self:SetPaused(false)
+                self:Leave()
+                if (self.onExit ~= nil) then self.onExit() end
+            end
+        end
+        return
+    end
+    if (Input.IsKeyJustDown(Key.Escape) and self.hold <= 0.0 and self.intro <= 0.0 and self.over < 0.0) then
+        self:Sound("MenuSelect")
+        self:SetPaused(true)
+        return
+    end
+
+    if (Input.IsKeyJustDown(Key.R)) then self:Restart() end
     for n, key in ipairs(PALETTE_KEYS) do
         if (Input.IsKeyJustDown(key)) then self:SetPalette(n) end
     end
@@ -649,14 +935,19 @@ function SpecialStage:Tick(deltaTime)
     if (self.over >= 0.0) then
         self.over = self.over - dt
         if (self.over < 0.0) then
-            if (self.failed) then self:Sound("ExitStage") end
-            self:Restart()
+            if (self.failed) then
+                self:Sound("ExitStage")
+                self:Restart()                  -- a failed stage is played again
+            else
+                self:Finish()                   -- the emerald was taken: back to the menu
+            end
         end
     end
 
-    -- steering: round the pipe, and only round it
+    local before = self.frame
+    -- steering: round the pipe, and only round it, while his feet are on it
     local want = 0.0
-    if (self.hold <= 0.0 and self.stun <= 0.0) then
+    if (self.hold <= 0.0 and self.intro <= 0.0 and self.stun <= 0.0) then
         if (Input.IsKeyDown(Key.A)) then want = want + 1.0 end
         if (Input.IsKeyDown(Key.D)) then want = want - 1.0 end
         local stick = Input.GetGamepadAxisValue(Gamepad.AxisLX)
@@ -666,31 +957,113 @@ function SpecialStage:Tick(deltaTime)
         want = math.max(-1.0, math.min(1.0, want))
     end
     want = want * self.data.angle_00_side                 -- A is always the player's left
-    local target = want * STEER
-    if (want == 0.0 and self.height <= 0.0) then
-        -- hands off: gravity slides him back down toward the floor
-        target = -math.sin(self.angle * TWO_PI / 256.0) * SLIDE
+    if (self.autoplay and self.hold <= 0.0 and self.intro <= 0.0 and self.stun <= 0.0) then
+        want = self:Pilot()                               -- already in the angle's own sense
     end
-    self.steer = self.steer + (target - self.steer) * math.min(1.0, STEER_GRIP * dt)
-    self.angle = self.angle + self.steer * dt
-    if (self.angle > 128.0) then self.angle = self.angle - 256.0 end       -- over the top and on
-    if (self.angle < -128.0) then self.angle = self.angle + 256.0 end
+    if (self.autoplay) then
+        -- and says where it is, four times a second, for the photographer to time its shots by
+        self.pilotSaid = (self.pilotSaid or 0.0) + dt
+        if (self.pilotSaid >= 0.25) then
+            self.pilotSaid = 0.0
+            print(string.format("FRAME %.1f", self.frame))
+            io.stdout:flush()
+        end
+    end
+    local radius = self.data.pipe_radius
+    if (self.height <= 0.0) then
+        if (want ~= 0.0 and self.steer * want >= STEER * 0.97) then
+            -- at full tilt (near enough: the grip only ever approaches it) and still holding:
+            -- momentum builds
+            self.steer = math.max(-STEER_MAX, math.min(STEER_MAX, self.steer + want * STEER_BUILD * dt))
+        else
+            local target, grip = want * STEER, STEER_GRIP
+            if (want == 0.0) then
+                -- hands off: gravity slides him back down toward the floor, and what speed he
+                -- had round the pipe coasts off
+                target, grip = -math.sin(self.angle * TWO_PI / 256.0) * SLIDE, STEER_COAST
+            end
+            self.steer = self.steer + (target - self.steer) * math.min(1.0, grip * dt)
+        end
+        self.angle = self:WrapAngle(self.angle + self.steer * dt)
+        if (want == 0.0 and self.hold <= 0.0 and math.abs(self.angle) > FALL_ANGLE) then
+            self.cling = self.cling + dt
+            if (self.cling >= CLING) then
+                self:LeaveSurface(0.0, false)   -- let go up the overhang: he drops off it, on his feet
+                self.falling = true
+            end
+        else
+            self.cling = 0.0
+        end
+    end
 
-    -- jumping: off the pipe's surface, toward its axis, and back
-    if (self.height <= 0.0 and self.hold <= 0.0 and (Input.IsKeyJustDown(Key.Space) or Input.IsGamepadButtonJustDown(Gamepad.A))) then
-        self.rise = JUMP
-        self:Sound("Jump")
+    -- jumping, and falling
+    -- For testing the jump without playing: S2_AUTOJUMP=<frame> jumps there and logs the flight.
+    local autoJump = false
+    if (self.testJump ~= nil and self.frame >= self.testJump) then autoJump, self.testJump = true, nil end
+    if (self.hold <= 0.0 and self.intro <= 0.0 and (Input.IsKeyJustDown(Key.Space) or autoJump)) then
+        if (self.height <= 0.0) then
+            self:LeaveSurface(JUMP, want ~= 0.0)
+            self:Sound("Jump")
+        elseif (not self.diving) then
+            -- jump again in the air: he drops straight back onto the pipe under him
+            local r = math.sqrt(self.cx * self.cx + self.cy * self.cy)
+            self.vx, self.vy = self.cx / r * DIVE, self.cy / r * DIVE
+            self.push, self.diving = 0.0, true
+        end
     end
-    if (self.height > 0.0 or self.rise > 0.0) then
-        self.height = self.height + self.rise * dt
-        self.rise = self.rise - GRAVITY * dt
-        if (self.height <= 0.0) then self.height, self.rise = 0.0, 0.0 end
+    if (self.height > 0.0) then
+        -- round the pipe: steering carries on in the air, held or coasting off, and turns the
+        -- whole section (him and his flight) with it
+        local target, grip = want * STEER, STEER_GRIP
+        if (want == 0.0) then target, grip = 0.0, AIR_COAST end
+        self.steer = self.steer + (target - self.steer) * math.min(1.0, grip * dt)
+        if (want == 0.0 and not self.diving) then
+            -- by how far he is to the side, not by his angle: the angle flips as he passes
+            -- near the axis at the top of a side jump, and the swing would snap the other way
+            local side = self.data.angle_00_side * self.cx / radius
+            self.steer = self.steer - side * AIR_PULL * (1.0 - self.level) * dt
+        end
+        local turn = self.data.angle_00_side * self.steer * dt * TWO_PI / 256.0
+        local c, sn = math.cos(turn), math.sin(turn)
+        self.cx, self.cy = self.cx * c - self.cy * sn, self.cy * c + self.cx * sn
+        self.vx, self.vy = self.vx * c - self.vy * sn, self.vy * c + self.vx * sn
+        self.nx, self.ny = self.nx * c - self.ny * sn, self.ny * c + self.nx * sn
+        -- and the flight itself: the rest of the push builds over the first moments, then gravity
+        if (not self.diving) then
+            if (self.ramp < JUMP_RAMP and self.push > 0.0) then
+                local step = math.min(dt, JUMP_RAMP - self.ramp) / JUMP_RAMP
+                self.vx = self.vx + self.nx * self.push * step
+                self.vy = self.vy + self.ny * self.push * step
+                self.ramp = self.ramp + dt
+            end
+            self.vy = self.vy - self.gravity * dt
+        end
+        self.cx = self.cx + self.vx * dt
+        self.cy = self.cy + self.vy * dt
+        local r = math.sqrt(self.cx * self.cx + self.cy * self.cy)
+        local t = math.atan(self.cx, -self.cy)                       -- round from the floor
+        self.angle = self:WrapAngle(self.data.angle_00_side * t * 256.0 / TWO_PI)
+        self.spin = self.spin + BALL_SPIN * dt
+        self.fallTime = self.fallTime + dt
+        if (self.testLog) then
+            print(string.format("AIR frame %.2f height %.3f angle %.1f vx %.2f vy %.2f", self.frame, radius - r, self.angle, self.vx, self.vy))
+        end
+        if (r >= radius) then
+            -- landed. His run round the pipe goes on as it was: the flight's own speed along
+            -- the surface is NOT added (it sent him round faster off every landing, a boost
+            -- the wind-up below is meant to be earned by holding)
+            self.steer = math.max(-STEER_MAX, math.min(STEER_MAX, self.steer))
+            self.height, self.diving, self.falling = 0.0, false, false
+        else
+            self.height = radius - r
+        end
     end
 
     -- forward, by himself
-    local before = self.frame
     if (self.hold > 0.0) then
         self.hold = self.hold - dt
+        self.intro = self.hold
+        self.frame = math.min(self.frame + SPEED * dt, 0.0)
     elseif (self.over < 0.0 or self.section > #self.data.sections) then
         local speed = SPEED
         if (self.stun > 0.0) then speed = SPEED * 0.45 end
@@ -727,11 +1100,10 @@ function SpecialStage:Tick(deltaTime)
     self.thumbs = math.max(0.0, self.thumbs - dt)
     local airborne = (self.height > 0.0)
     local mesh
-    if (airborne) then
+    if (airborne and not self.falling) then
         mesh = self.meshBall
-    elseif (self.hold > 0.0) then
-        mesh = self.sonicIdle
     else
+        -- (at the start he is already running, up the lead-in, while START is up)
         local k = math.floor(self.runClock * SONIC_FPS) % SONIC_FRAMES
         mesh = (self.thumbs > 0.0) and self.sonicThumbs[k] or self.sonicRun[k]
     end
@@ -740,14 +1112,53 @@ function SpecialStage:Tick(deltaTime)
         self.playerMesh = mesh
         self.player:SetStaticMesh(mesh)
     end
-    local lift = airborne and (BALL_RADIUS + self.height) or 0.0
-    local place, fwd, inward = self:Place(self.frame, self.angle, lift)
+    local place, fwd, inward = self:Place(self.frame, self.angle, 0.0)
+    if (airborne) then
+        -- in the air he is his point in the section, (cx, cy) from the axis, with the ball's
+        -- radius added ALONG THE PUSH: added along his line to the axis instead, it would push
+        -- his middle through the axis and out the other side near the top of a hop, a bob
+        local pos, fwdHere, upHere = self:TrackAt(self.frame)
+        local left = Cross(upHere, fwdHere)
+        local x = self.cx + self.nx * BALL_RADIUS
+        local y = self.cy + self.ny * BALL_RADIUS
+        place = Add(pos, Add(Scale(left, x), Scale(upHere, self.data.pipe_radius + y)))
+    end
     self.player:SetWorldPosition(ToVec(place))
-    self.player:SetWorldRotationQuat(FacingQuat(fwd, inward))
+    if (airborne and not self.falling) then
+        -- the ball rolls forward as it flies, about the track's own up: not `inward`, which
+        -- swings right round as he passes near the axis and would have the ball curving
+        local _, _, upHere = self:TrackAt(self.frame)
+        local c, sn = math.cos(self.spin), math.sin(self.spin)
+        local f = Add(Scale(fwd, c), Scale(upHere, -sn))
+        local u = Add(Scale(fwd, sn), Scale(upHere, c))
+        self.player:SetWorldRotationQuat(FacingQuat(f, u))
+    elseif (airborne) then
+        -- dropped off the wall: he swings upright as the fall starts, and falls feet first
+        -- (turned about the track's forward, so upside down at the start is no trouble)
+        local _, _, upHere = self:TrackAt(self.frame)
+        local left = Cross(upHere, fwd)
+        local theta = math.atan(Dot(inward, left), Dot(inward, upHere))
+        local swing = theta * (1.0 - math.min(1.0, self.fallTime / FALL_TURN))
+        local u = Add(Scale(upHere, math.cos(swing)), Scale(left, math.sin(swing)))
+        self.player:SetWorldRotationQuat(FacingQuat(fwd, u))
+    else
+        self.player:SetWorldRotationQuat(FacingQuat(fwd, inward))
+    end
     self.player:SetVisible(self.stun <= 0.0 or (math.floor(self.stun * 20.0) % 2 == 0))   -- flickers when hit
-    -- his shadow stays on the pipe under him, and draws in as he jumps away from it
+    -- his shadow stays on the pipe under him, and draws in as he jumps away from it. In the
+    -- air "under him" is straight DOWN, onto the floor: his angle round the pipe means nothing
+    -- near the axis (a hair to one side there is a quarter turn), and a shadow that followed it
+    -- would fly to the rim on every hop
     if (self.playerShadow ~= nil) then
-        self:PlaceShadow(self.playerShadow, self.frame, self.angle, self.height, SHADOW_SONIC, SHADOW_SONIC)
+        local shadowAngle, drop = self.angle, self.height
+        if (airborne) then
+            local radius = self.data.pipe_radius
+            local x = math.max(-radius, math.min(radius, self.cx))
+            local floorY = -math.sqrt(radius * radius - x * x)
+            shadowAngle = self.data.angle_00_side * math.asin(x / radius) * 256.0 / TWO_PI
+            drop = math.max(0.0, self.cy - floorY)
+        end
+        self:PlaceShadow(self.playerShadow, self.frame, shadowAngle, drop, SHADOW_SONIC, SHADOW_SONIC)
     end
 
     -- the camera rides the centre line behind him: it follows the TRACK, not the player,
@@ -775,17 +1186,33 @@ function SpecialStage:Tick(deltaTime)
         end
         swing = swing * swing * (3.0 - 2.0 * swing)             -- ease in and out
     end
+    -- THE INTRO: a full circuit, blended out of the ordinary camera and back into it at its
+    -- ends (both are behind him, where the circuit starts and ends). `phi` runs 0 .. 360.
+    local introPhi, introLift = nil, 0.0
+    if (self.intro > 0.0) then
+        local u = 1.0 - self.intro / INTRO_TIME                 -- 0 at the start, 1 at the end
+        local w = math.min(1.0, (INTRO_TIME - self.intro) / INTRO_IN, self.intro / INTRO_OUT)
+        swing = w * w * w * (w * (w * 6.0 - 15.0) + 10.0)      -- smootherstep: starts and stops dead soft
+        local ease = u * u * (3.0 - 2.0 * u)
+        introPhi = ease * TWO_PI
+        -- low at the front (phi near 180), up round the back and sides
+        local front = 0.5 - 0.5 * math.cos(introPhi)            -- 0 behind, 1 in front
+        front = front * front * front                           -- the dip is only at the front, not the sides
+        introLift = INTRO_HIGH + (INTRO_LOW - INTRO_HIGH) * front
+    end
     if (swing > 0.0) then
         -- In SONIC'S OWN frame, not the track's: his left, and his up (toward the pipe's axis).
         -- So wherever he is round the pipe the camera is beside him and inside it, and he is
         -- upright on the screen.
         local chest = Add(place, Scale(inward, 2.4))
         local left = Cross(inward, fwdHere)
-        local phi = swing * math.rad(ORBIT_DEGREES)
-        local orbit = Add(chest, Add(Scale(fwdHere, -math.cos(phi) * ORBIT_RADIUS),
-                                     Add(Scale(left, math.sin(phi) * ORBIT_RADIUS), Scale(inward, ORBIT_LIFT))))
+        local phi, radius, lift = swing * math.rad(ORBIT_DEGREES), ORBIT_RADIUS, ORBIT_LIFT
+        if (introPhi ~= nil) then phi, radius, lift = introPhi, INTRO_RADIUS, introLift end
+        local orbit = Add(chest, Add(Scale(fwdHere, -math.cos(phi) * radius),
+                                     Add(Scale(left, math.sin(phi) * radius), Scale(inward, lift))))
         eye = Add(Scale(eye, 1.0 - swing), Scale(orbit, swing))
         local aim = Add(chest, Scale(inward, 1.6))              -- a little over his chest: he sits low, the emblem above him
+        if (introPhi ~= nil) then aim = chest end               -- the intro looks straight at him
         target = Add(Scale(target, 1.0 - swing), Scale(aim, swing))
     end
     local look = Normalize(Add(target, Scale(eye, -1.0)))

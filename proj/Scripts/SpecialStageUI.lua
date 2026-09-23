@@ -26,6 +26,7 @@
 --     TheSpecialStageUI:SetTotal(n)        the number in the TOTAL box (rings to go, or the total)
 --     TheSpecialStageUI:ShowCool()         when a ring check is passed
 --     TheSpecialStageUI:ShowBanner(t, s)   a line of words for s seconds
+--     TheSpecialStageUI:ShowPause(on, i)   the pause menu, CONTINUE (1) or EXIT (2) picked
 --
 -- Everything is laid out on the original's 320 x 224 screen and scaled to the window's
 -- height, so it sits the same at any resolution and is re-laid if the window changes size.
@@ -144,6 +145,17 @@ function SpecialStageUI:DressEmblem()
     self.coolText:SetText(self.tooBad and "TOO BAD !" or "COOL !")
 end
 
+-- The pause menu: CONTINUE over EXIT, the picked one in yellow.
+function SpecialStageUI:ShowPause(visible, index)
+    self.pauseOn, self.pauseIndex = visible and true or false, index or 1
+    if (not self.built) then return end
+    for i, t in ipairs(self.pauseItems) do
+        t:SetVisible(self.pauseOn)
+        t:SetColor((i == self.pauseIndex) and YELLOW or WHITE)
+    end
+    if (self.k ~= nil) then self:PlacePause() end
+end
+
 -- A line of words across the middle for a few seconds: NOT ENOUGH RINGS, EMERALD GET !
 function SpecialStageUI:ShowBanner(text, seconds)
     self.bannerText = text
@@ -193,8 +205,10 @@ function SpecialStageUI:Build()
     self.emblem   = MakeQuad(self, self.texEmblem, WHITE)
     self.thumb    = MakeQuad(self, self.texThumb, WHITE)
     self.coolText = MakeText(self, "COOL !", WHITE)
+    self.pauseItems = { MakeText(self, "CONTINUE", WHITE), MakeText(self, "EXIT", WHITE) }
 
     self.built = true
+    self:ShowPause(self.pauseOn, self.pauseIndex)
     self:ShowStartParts(false)
     self:ShowCoolParts(false)
 end
@@ -260,6 +274,18 @@ function SpecialStageUI:Layout()
     self:PlaceTotal()
     self.coolText:SetTextSize(26.0 * self.k)
     self.banner:SetTextSize(22.0 * self.k)
+    for _, t in ipairs(self.pauseItems) do t:SetTextSize(22.0 * self.k) end
+    self:PlacePause()
+end
+
+-- The pause menu: each line centred on the window by its measured width, one over the other
+-- about the middle of the screen.
+function SpecialStageUI:PlacePause()
+    local width = self:WindowSize()
+    for i, t in ipairs(self.pauseItems) do
+        local wide = (t.GetTextWidth ~= nil) and t:GetTextWidth() or 0.0
+        t:SetPosition(width * 0.5 - wide * 0.5, (self.top or 0.0) + (92.0 + (i - 1) * 28.0) * self.k)
+    end
 end
 
 -- ------------------------------------------------------------------ animation
@@ -401,4 +427,5 @@ function SpecialStageUI:Tick(deltaTime)
     end
     self:TickStart(deltaTime)
     self:TickCool(deltaTime)
+    if (self.pauseOn) then self:PlacePause() end        -- the width is only known once drawn
 end

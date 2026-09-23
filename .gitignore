@@ -12,3 +12,6 @@ proj/Assets/Sounds/SW_SpecialStage_*.oct
 
 # The sky: 50+ MB uncooked, remade by native/export_assets_gc.py from the PC repo
 proj/Assets/Textures/T_S2Sky_*.oct
+
+# The other seven skies: copied from the PC repo by native/export_assets_gc.py (226 MB each)
+proj/Assets/Skies/

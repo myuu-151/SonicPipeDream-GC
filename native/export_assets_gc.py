@@ -43,7 +43,10 @@ EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_Lo
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),
            ("Fail.wav", "SW_Fail", 0x51C0FFEE00300019), ("Explosion2.wav", "SW_Explosion", 0x51C0FFEE0030001A),
-           ("Exit_SS.wav", "SW_ExitStage", 0x51C0FFEE0030001B)]
+           ("Exit_SS.wav", "SW_ExitStage", 0x51C0FFEE0030001B),
+           # the menus: the highlight moving, a menu going on to the next (and pausing), a stage chosen
+           ("MenuButton.ogg", "SW_MenuMove", 0x51C0FFEE0030001C), ("Select.ogg", "SW_MenuSelect", 0x51C0FFEE0030001E),
+           ("SpecialWarp.ogg", "SW_MenuWarp", 0x51C0FFEE0030001D)]
 NORMALISE = {"SW_GetEmerald": 0.97}         # as the PC does: that file is quiet
 
 
@@ -234,8 +237,104 @@ def hud():
             os.remove(os.path.join(pc_fx.OUT, name))
 
 
+# THE OTHER SEVEN SKIES. Each stage has its own (stage_palettes.py's SKY) and the menu sits over
+# Noir. The classic sky above is the PC's generator run as it is, at full size, so the PC's own
+# variant frames are exactly what running it here would make: they are copied. On the disc they
+# are about 29 MB each once cooked; in memory, only the 8 star frames of the sky on show and the
+# few medley frames Sky.lua is streaming.
+SKY_NAMES = ["Midnight", "Dawn", "Pastel", "Sunset", "Aurora", "Inferno", "Noir"]
+
+
+def skies():
+    for name in SKY_NAMES:
+        src = os.path.join(PC, "proj", "Assets", "Skies", name)
+        dst = os.path.join(PROJ, "Assets", "Skies", name)
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
+        print("sky %-9s %d files" % (name, len(os.listdir(dst))))
+
+
+def emeralds():
+    """The seven chaos emeralds, one a stage: the PC's export_emeralds.py, run as it is, but its
+    two textures a gem left to the console's compressed cook. The PC keeps them uncompressed
+    (256 x 256 RGBA, half a megabyte a gem); here that is 64 KB."""
+    sys.path.insert(0, os.path.join(PC, "native"))
+    import export_emeralds as pe
+    write = pe.write_texture
+
+    def compressed(*a, **k):
+        k["force_hq"] = False
+        return write(*a, **k)
+
+    pe.write_texture = compressed
+    pe.OUT = os.path.join(PROJ, "Assets", "Stage", "Emeralds")
+    pe.main()
+
+
+# THE MENU AND THE STAGE SELECT: the PC's gen_menu_assets.py, run as it is, with its textures
+# made for a 640 x 480 television. The PC cooks the art as it was drawn, up to 4x the mockup
+# and uncompressed: 2048-wide textures (more than this GPU takes at all) and megabytes of them.
+# Here every piece is scaled to MENU_SCALE art pixels a mockup pixel -- the television shows the
+# 522 x 386 mockup at about 1.23 -- and left to the console cook (RGB5A3 for soft edges, CMPR for
+# the opaque photographs). MenuLayout.lua carries each texture's real size, so the layout is the
+# PC's whatever size the art is.
+MENU_SCALE = 1.25
+MENU_FIT = {"T_Menu_Circles": 256}          # at most this, a side: the circles would pad to 512 x 512
+
+
+def menu():
+    import json
+    from PIL import Image
+    sys.path.insert(0, os.path.join(PC, "native"))
+    import gen_menu_assets as pm
+    from gen_s2sky_assets import write_texture
+
+    layout = json.load(open(os.path.join(pm.PARTS, "layout.json")))
+    where = {p["name"]: p for p in layout["parts"]}
+    mock = {}                                   # texture name -> its size on the mockup
+    for name, part in pm.PIECES:
+        if part in pm.DERIVED:
+            mock[name] = pm.DERIVED[part][1:]
+        elif part == "bg_scanlines_full":
+            mock[name] = (None, layout["reference_size"][1] - layout["panel_top"])
+        else:
+            mock[name] = (where[part]["w"], where[part]["h"])
+    for i, (_key, part) in enumerate(pm.ITEMS):
+        size = Image.open(os.path.join(pm.PARTS, part + ".png")).size
+        mock["T_Menu_Item%d" % (i + 1)] = mock["T_Menu_Item%d_Off" % (i + 1)] = size
+
+    def mockup_size(name):
+        if name in mock:
+            return mock[name]
+        part = where["preview_picture"] if name.startswith("T_Menu_Preview") else where["emerald"]
+        return part["w"], part["h"]
+
+    def save(name, img, index):
+        mw, mh = mockup_size(name)
+        scale = MENU_SCALE
+        if name in MENU_FIT:
+            scale = min(scale, MENU_FIT[name] / float(max(mw, mh)))
+        w = img.width if mw is None else min(img.width, int(round(mw * scale)))    # never enlarged
+        h = min(img.height, int(round(mh * scale)))
+        if (w, h) != img.size:
+            # weighted by opacity, or the transparent black round the art bleeds into its edge
+            img = img.convert("RGBa").resize((w, h), Image.LANCZOS).convert("RGBA")
+        canvas = Image.new("RGBA", (pm.pot(img.width), pm.pot(img.height)), (0, 0, 0, 0))
+        canvas.alpha_composite(img, (0, 0))
+        write_texture(os.path.join(pm.TEX, name + ".oct"), name, pm.UUID_MENU + index,
+                      canvas.width, canvas.height, canvas.tobytes(), wrap=0, force_hq=False, quiet=True)
+        return canvas.size, img.size
+
+    pm.TEX = os.path.join(PROJ, "Assets", "Textures", "UI")
+    pm.LUA = os.path.join(PROJ, "Scripts", "MenuLayout.lua")
+    pm.save = save
+    pm.main()
+
+
 if __name__ == "__main__":
-    sonic()
-    sounds()
-    hud()
-    sky()
+    # python native/export_assets_gc.py [part ...]   -- all of them, or only those named
+    parts = {"sonic": sonic, "sounds": sounds, "hud": hud, "sky": sky, "skies": skies,
+             "emeralds": emeralds, "menu": menu}
+    for name in (sys.argv[1:] or list(parts)):
+        parts[name]()

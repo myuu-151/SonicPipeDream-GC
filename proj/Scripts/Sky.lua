@@ -50,6 +50,8 @@ local function MedleyName(sky, i)
     return string.format("T_Sky%s_Medley_%03d", SKY_NAMES[sky], i)
 end
 
+Sky.starName = StarName          -- for Screens.lua's Sky:StarFrame
+
 function Sky:Create()
     -- Which sky: 0 classic, 1 Midnight, 2 Dawn, 3 Pastel, 4 Sunset, 5 Aurora,
     -- 6 Inferno, 7 Noir. Change it in the inspector or from a level script.
@@ -67,8 +69,10 @@ function Sky:Create()
     -- set up in the editor: SpecialStage.lua spawns the track, the rings, Sonic, the camera
     -- and the UI for itself. Untick it in the inspector to look at the sky alone.
     self.startSpecialStage = true
+    self.showMenu = true            -- the title menu opens over the sky; Main Game starts the stage
     TheSky = self                   -- so a stage can set `sky` to the one its palette names
     self.startedSpecialStage = false
+    self.started = false
 end
 
 function Sky:GatherProperties()
@@ -76,6 +80,7 @@ function Sky:GatherProperties()
     {
         { name = "sky", type = DatumType.Integer },
         { name = "startSpecialStage", type = DatumType.Bool },
+        { name = "showMenu", type = DatumType.Bool },
         { name = "twinklesPerSecond", type = DatumType.Float },
         { name = "medleyFramesPerSecond", type = DatumType.Float },
         { name = "colourShiftsPerSecond", type = DatumType.Float },
@@ -93,9 +98,11 @@ function Sky:LoadSky(sky)
 
     -- Held so the frames are not loaded and unloaded every time one comes back
     -- around.
-    self.starFrames = {}
+    self.starFrames, self.starAsked, self.window = {}, {}, {}
+    collectgarbage()
+    RefSweep()
     for i = 1, STAR_FRAMES do
-        self.starFrames[i] = LoadAsset(StarName(sky, i))
+        self.starAsked[i] = AsyncLoadAsset(StarName(sky, i))
     end
 
     -- The diamond layer comes in two forms and the generator decides which: the
@@ -146,7 +153,7 @@ function Sky:UpdateSky(deltaTime)
     local frame = math.floor(self.time * self.twinklesPerSecond) % STAR_FRAMES
     if (frame ~= self.frame) then
         self.frame = frame
-        local tex = self.starFrames[frame + 1]
+        local tex = self:StarFrame(frame + 1)
         if (tex ~= nil) then
             self.skyMat:SetTexture(STAR_SLOT, tex)
         end
@@ -238,13 +245,84 @@ function Sky:UpdateSky(deltaTime)
     end
 end
 
-function Sky:Tick(deltaTime)
-    -- Tick is the GAME's; the editor calls EditorTick. So the stage never starts in the editor.
-    if (self.startSpecialStage and not self.startedSpecialStage) then
+-- The menu comes first, over the sky, and the stage starts when Main Game is chosen. Set
+-- `startSpecialStage` and untick `showMenu` in the inspector to skip straight to playing,
+-- which is what the S2_NOMENU environment variable does as well.
+function Sky:StartSpecialStage(which)
+    if (not self.startedSpecialStage) then
         self.startedSpecialStage = true
         local stage = self:GetWorld():SpawnNode("Node3D")
         stage:SetName("SpecialStage")
         stage:SetScript("SpecialStage")
+        -- The script's Create picked stage 1 (or S2_STAGE); the stage select overrides it
+        -- before the first Tick builds anything.
+        if (which ~= nil and TheSpecialStage ~= nil) then TheSpecialStage.stage = which end
+        return
+    end
+    -- Been here before: the node is still in the world with its meshes loaded, so it is put
+    -- back to work rather than built again.
+    if (TheSpecialStage ~= nil) then TheSpecialStage:Enter(which) end
+end
+
+-- Three screens in one world: the menu, the stage select it leads to, and the stage itself.
+-- The two screens are Canvases that hide rather than unload, so going back to one is instant
+-- and neither has to be built twice.
+function Sky:ShowMenu()
+    local world = self:GetWorld()
+    local menu = world:SpawnNode("Canvas")
+    menu:SetName("Menu")
+    menu:SetScript("Menu")
+    local select = world:SpawnNode("Canvas")
+    select:SetName("StageSelect")
+    select:SetScript("StageSelect")
+
+    -- TheMenu and TheStageSelect are set by each script's Create, which has run by the time
+    -- SetScript returns.
+    if (TheStageSelect ~= nil) then
+        TheStageSelect:Close()
+        TheStageSelect.onChoose = function(stage)
+            TheStageSelect:Close()
+            self:StartSpecialStage(stage)
+            -- The stage hands back here when its emerald is taken.
+            if (TheSpecialStage ~= nil) then
+                TheSpecialStage.onExit = function()
+                    TheStageSelect:Open()           -- paused and EXIT chosen
+                end
+                TheSpecialStage.onFinished = function(won)
+                    TheStageSelect:SetWon(won, true)
+                    -- All seven emeralds is what MARATHON waits for.
+                    if (TheStageSelect:AllWon() and TheMenu ~= nil) then
+                        TheMenu:SetUnlocked("marathon", true)
+                    end
+                    TheStageSelect:Open()
+                end
+            end
+        end
+        TheStageSelect.onBack = function()
+            TheStageSelect:Close()
+            if (TheMenu ~= nil) then TheMenu:Open() end
+        end
+    end
+    if (TheMenu ~= nil) then
+        TheMenu.onChoose = function(key)
+            if (key == "main_game" and TheStageSelect ~= nil) then
+                TheMenu:Close()
+                TheStageSelect:Open()
+            end
+        end
+    end
+end
+
+function Sky:Tick(deltaTime)
+    -- Tick is the GAME's; the editor calls EditorTick. So nothing starts in the editor.
+    if (not self.started) then
+        self.started = true
+        local skipMenu = (os ~= nil and os.getenv ~= nil and os.getenv("S2_NOMENU") ~= nil)
+        if (self.showMenu and not skipMenu) then
+            self:ShowMenu()
+        elseif (self.startSpecialStage) then
+            self:StartSpecialStage()
+        end
     end
     self:UpdateSky(deltaTime)
 end
@@ -252,3 +330,5 @@ end
 function Sky:EditorTick(deltaTime)
     self:UpdateSky(deltaTime)
 end
+
+Script.Require("Screens")       -- GAMECUBE: the menus, the loading screen, the pad

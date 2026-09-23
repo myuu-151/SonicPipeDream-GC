@@ -18,16 +18,21 @@ Both repos sit side by side:
 | Path | What it is |
 |---|---|
 | `native/export_gc.py` | Blender script. Reads a PC stage `.json`, writes GameCube-sized meshes and `StageData<N>.lua` into `proj/`. Reuses the PC's mesh writers without editing them. |
-| `native/patch_from_pc.py` | Makes `proj/Scripts/SpecialStage.lua` from the PC's script plus a list of GameCube changes. Gameplay fixes are made on the PC and arrive here by running it again. |
+| `native/export_assets_gc.py` | Everything else, from the PC repo: Sonic, sounds, music, the HUD, all eight skies, the emeralds, and the menu art sized for a television. |
+| `native/patch_from_pc.py` | Makes the scripts from the PC's (`SpecialStage`, `Sky`, `Menu`, `StageSelect`, the HUD, the music) plus a list of GameCube changes to each. Gameplay fixes are made on the PC and arrive here by running it again. |
+| `proj/Scripts/Screens.lua`, `Loading.lua`, `PadInput.lua` | The only scripts written here: how the game gets between the menus and a stage in 24 MB, the loading screen, and the pad. |
 | `proj/` | The Octave project that gets packaged. |
 
 ## Build
 
-    # 1. the stage: track pieces, rings, stage data (stage 1)
-    blender -b ../Sonic2Special3D/external/halfpipe/TrackPiecesPack.blend --python native/export_gc.py -- 1
+    # 1. the stages: track pieces, rings, stage data, one run a stage (1 to 7), about 40 s each
+    for n in 1 2 3 4 5 6 7; do
+        blender -b ../Sonic2Special3D/external/halfpipe/TrackPiecesPack.blend --python native/export_gc.py -- $n
+    done
 
-    # 2. everything else: Sonic, sounds, music, the sky   (needs Pillow, numpy, soundfile)
-    #    The music and the sky are big and are NOT in git: this step makes them.
+    # 2. everything else: Sonic, sounds, music, HUD, skies, emeralds, menus  (needs Pillow, numpy, soundfile)
+    #    The music and the skies are big and are NOT in git: this step makes them (1.8 GB of skies).
+    #    Name parts to make only those: python native/export_assets_gc.py menu emeralds
     python native/export_assets_gc.py
 
     # 3. the scripts, from the PC's
@@ -70,4 +75,11 @@ on the frozen game to find; the symptom looks like anything but audio.
 
 ## Controls
 
-Stick or d-pad to steer, A to jump, Start to restart.
+| | Menus | Stage |
+|---|---|---|
+| Stick or d-pad | Move the highlight | Steer round the pipe |
+| A | Choose | Jump (again in the air to drop back down) |
+| B | Back, on the stage select | |
+| Start | Choose | Pause: CONTINUE or EXIT to the stage select |
+
+Emeralds won are saved on the memory card in slot A.
