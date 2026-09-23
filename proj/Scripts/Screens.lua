@@ -26,6 +26,12 @@
 
 Script.Require("PadInput")
 Script.Require("GcTest")        -- switches for testing in Dolphin; all off unless set there
+Script.Require("SaveInfo")      -- the save's name and icon on the memory card screen
+
+-- Every save written from here on carries them (engine: System_Dolphin.cpp, SYS_WriteSave).
+if (System.SetSaveInfo ~= nil and SaveInfo ~= nil) then
+    System.SetSaveInfo(SaveInfo.title, SaveInfo.description, SaveInfo.icon)
+end
 
 -- The pipe (and the rings) are vertex-coloured and unlit: kept as position and colour alone they
 -- take a third of the memory -- 1.5 MB a stage instead of 4.2 -- and that headroom is what keeps
@@ -100,8 +106,11 @@ function Sky:SpawnMenus(selectAt)
     self.selectNode = world:SpawnNode("Canvas")
     self.selectNode:SetName("StageSelect")
     self.selectNode:SetScript("StageSelect")
+    self.saveNode = world:SpawnNode("Canvas")
+    self.saveNode:SetName("SavePrompt")
+    self.saveNode:SetScript("SavePrompt")
 
-    -- TheMenu and TheStageSelect are set by each script's Create, which has run by now.
+    -- TheMenu, TheStageSelect and TheSavePrompt are set by each script's Create, which has run.
     TheStageSelect:Close()
     TheStageSelect.onChoose = function(stage) self:GoToStage(stage) end
     TheStageSelect.onBack = function()
@@ -112,8 +121,13 @@ function Sky:SpawnMenus(selectAt)
         if (key == "main_game") then
             TheMenu:Close()
             TheStageSelect:Open()
+        elseif (key == "save") then
+            -- the memory card prompt, over the menu; the menu keeps still until it closes
+            TheMenu.busy = true
+            TheSavePrompt:Open()
         end
     end
+    TheSavePrompt.onClose = function() TheMenu.busy = false end
     if (selectAt ~= nil) then
         TheMenu:Close()
         TheStageSelect.index = selectAt
@@ -128,8 +142,9 @@ end
 function Sky:DropMenus()
     if (self.menuNode ~= nil) then self.menuNode:Destruct() end
     if (self.selectNode ~= nil) then self.selectNode:Destruct() end
-    self.menuNode, self.selectNode = nil, nil
-    TheMenu, TheStageSelect = nil, nil
+    if (self.saveNode ~= nil) then self.saveNode:Destruct() end
+    self.menuNode, self.selectNode, self.saveNode = nil, nil, nil
+    TheMenu, TheStageSelect, TheSavePrompt = nil, nil, nil
     Sweep()
 end
 

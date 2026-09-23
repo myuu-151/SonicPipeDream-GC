@@ -31,9 +31,10 @@ MenuLayout = {
         T_Menu_LabelSelect = { x = 400, y = 321, w = 38, h = 12, aw = 48, ah = 15, cw = 64, ch = 16 },
         T_Menu_LabelBack = { x = 481, y = 321, w = 30, h = 12, aw = 38, ah = 15, cw = 64, ch = 16 },
         T_Menu_Item1 = { x = 41, y = 105, w = 198, h = 30, aw = 248, ah = 38, cw = 256, ch = 64 },
-        T_Menu_Item2 = { x = 38, y = 161, w = 167, h = 30, aw = 209, ah = 38, cw = 256, ch = 64 },
-        T_Menu_Item3 = { x = 39, y = 213, w = 139, h = 29, aw = 174, ah = 36, cw = 256, ch = 64 },
-        T_Menu_Item4 = { x = 39, y = 266, w = 135, h = 34, aw = 169, ah = 42, cw = 256, ch = 64 },
+        T_Menu_Item2 = { x = 38, y = 155, w = 167, h = 30, aw = 209, ah = 38, cw = 256, ch = 64 },
+        T_Menu_Item3 = { x = 39, y = 206, w = 113, h = 29, aw = 141, ah = 36, cw = 256, ch = 64 },
+        T_Menu_Item4 = { x = 39, y = 253, w = 219, h = 34, aw = 274, ah = 42, cw = 512, ch = 64 },
+        T_Menu_Item5 = { x = 39, y = 303, w = 86, h = 34, aw = 108, ah = 42, cw = 128, ch = 64 },
         T_Menu_Preview1 = { x = 334, y = 122, w = 165, h = 143, aw = 165, ah = 143, cw = 256, ch = 256 },
         T_Menu_Emerald1 = { x = 402, y = 93, w = 30, h = 24, aw = 38, ah = 30, cw = 64, ch = 32 },
         T_Menu_Preview2 = { x = 334, y = 122, w = 165, h = 143, aw = 165, ah = 143, cw = 256, ch = 256 },
@@ -50,7 +51,7 @@ MenuLayout = {
         T_Menu_Emerald7 = { x = 402, y = 93, w = 30, h = 24, aw = 38, ah = 30, cw = 64, ch = 32 },
         T_Menu_EmeraldOff = { x = 402, y = 93, w = 30, h = 24, aw = 38, ah = 30, cw = 64, ch = 32 },
     },
-    items = { "main_game", "marathon", "records", "options" },
+    items = { "main_game", "marathon", "extras", "chao_garden", "save" },
     preview_frames = 16,      -- a stage's preview clip: T_Menu_Preview<n>, then _01 .. this - 1
     preview_fps = 6,
 }

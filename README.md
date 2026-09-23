@@ -21,8 +21,9 @@ skies and music, running at 60 frames a second.
 - **Run anywhere round the pipe**, wind up speed by holding a direction, leap across to the far
   wall or drop dash straight back down.
 - **Eight animated skies**, streamed from the disc as they play.
-- **A stage select** with a moving preview of every stage; emeralds you win are saved to the
-  memory card in slot A.
+- **A stage select** with a moving preview of every stage.
+- **Save** from the title menu to the memory card in slot A (1 block, with its own icon). After
+  that, every emerald you win is saved as you win it.
 - **Music** streamed from the disc, and the full set of sound effects.
 - **Coming:** Marathon, one endless run that gets harder as it goes.
 

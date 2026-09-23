@@ -110,13 +110,14 @@ function StageSelect:LoadWon()
     end
 end
 
-function StageSelect:SaveWon()
-    if (System == nil or System.WriteSave == nil) then return end
+function StageSelect:SaveWon(asked)
+    if (System == nil or System.WriteSave == nil) then return false end
+    if (not asked and not System.DoesSaveExist(SAVE)) then return false end
     local text = ""
     for i = 1, STAGES do text = text .. (self.won[i] and "1" or "0") end
     local stream = Stream.Create()
     stream:WriteString(text)
-    System.WriteSave(SAVE, stream)
+    return System.WriteSave(SAVE, stream) and true or false
 end
 
 -- All seven: what unlocks MARATHON in the menu.

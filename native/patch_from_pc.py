@@ -345,6 +345,20 @@ end
     self:Show(self.open)
 end
 """),
+        # SAVE, the fifth item, is the GameCube's own (export_assets_gc.py adds its art and
+        # row): it opens the memory card prompt, SavePrompt.lua.
+        ("""local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false }""",
+         """local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false, save = true }"""),
+        # While the save prompt is up the menu shows, but takes no input: the prompt has it.
+        ("""    self:ScrollWatermark(deltaTime)
+    self:BlinkCursor(deltaTime)
+""", """    self:ScrollWatermark(deltaTime)
+    self:BlinkCursor(deltaTime)
+    if (self.busy) then
+        self.armed = false                  -- and the key that closes the prompt is not a choice
+        return
+    end
+"""),
     ],
     # The stage select is the PC's, but for its previews. Each is a clip of 16 frames, and the PC
     # loads all seven stages' clips at once: 112 pictures, 3.5 MB here. So only the stage under
@@ -353,6 +367,26 @@ end
     # it for a moment -- not for every stage it passes on the way -- and the last stage's are let
     # go first. The clip plays as its frames arrive.
     "StageSelect.lua": [
+        # NOTHING IS WRITTEN TO A MEMORY CARD UNASKED. The PC saves each emerald as it is won;
+        # here that would make a file on the player's card without a word. The first save is made
+        # from the menu's SAVE (SavePrompt.lua, which says what is in slot A and how many blocks
+        # it needs); after that the file is there and each emerald won is saved into it.
+        ("""function StageSelect:SaveWon()
+    if (System == nil or System.WriteSave == nil) then return end
+    local text = ""
+    for i = 1, STAGES do text = text .. (self.won[i] and "1" or "0") end
+    local stream = Stream.Create()
+    stream:WriteString(text)
+    System.WriteSave(SAVE, stream)
+end""", """function StageSelect:SaveWon(asked)
+    if (System == nil or System.WriteSave == nil) then return false end
+    if (not asked and not System.DoesSaveExist(SAVE)) then return false end
+    local text = ""
+    for i = 1, STAGES do text = text .. (self.won[i] and "1" or "0") end
+    local stream = Stream.Create()
+    stream:WriteString(text)
+    return System.WriteSave(SAVE, stream) and true or false
+end"""),
         ("""    self.previewClip = {}
     local frames = (MenuLayout ~= nil and MenuLayout.preview_frames) or 1
     for i = 1, STAGES do

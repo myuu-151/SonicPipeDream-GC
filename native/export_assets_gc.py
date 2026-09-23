@@ -282,6 +282,14 @@ def emeralds():
 MENU_SCALE = 1.25
 MENU_FIT = {"T_Menu_Circles": 256}          # at most this, a side: the circles would pad to 512 x 512
 
+# SAVE, the GameCube's own fifth item (it opens SavePrompt.lua), under the PC's four. The mockup
+# spaced four rows 53 apart down to y 300, and the watermark runs along under them from 344; five
+# at that spacing would run into it. So all five are spaced again, evenly, MENU_ROW_GAP apart
+# centre to centre, from where the first row's centre is.
+MENU_EXTRA_ITEMS = [("save", "item_save")]
+MENU_FIRST_CENTRE = 120.0
+MENU_ROW_GAP = 50.0
+
 
 def menu():
     import json
@@ -292,6 +300,13 @@ def menu():
 
     layout = json.load(open(os.path.join(pm.PARTS, "layout.json")))
     where = {p["name"]: p for p in layout["parts"]}
+
+    pm.ITEMS = list(pm.ITEMS) + MENU_EXTRA_ITEMS
+    for i, (_key, part) in enumerate(pm.ITEMS):
+        row = where.get(part) or where[pm.ROW_OF.get(part, "item_options")]
+        h = Image.open(os.path.join(pm.PARTS, part + ".png")).height
+        pm.ROW_AT[part] = (row["x"], int(round(MENU_FIRST_CENTRE + i * MENU_ROW_GAP - h * 0.5)))
+    pm.ROW_OF.setdefault("item_save", "item_options")
     mock = {}                                   # texture name -> its size on the mockup
     for name, part in pm.PIECES:
         if part in pm.DERIVED:
@@ -310,7 +325,21 @@ def menu():
         part = where["preview_picture"] if name.startswith("T_Menu_Preview") else where["emerald"]
         return part["w"], part["h"]
 
+    # The PC numbers its textures' UUIDs in the order it cooks them, items included, so an item
+    # added here would move every texture cooked after it onto another's number. The added items
+    # take numbers of their own, well clear, and the rest keep the PC's.
+    first_added = len(pm.PIECES) + 2 * (len(pm.ITEMS) - len(MENU_EXTRA_ITEMS))
+    added = 2 * len(MENU_EXTRA_ITEMS)
+
+    def uuid_index(index):
+        if index < first_added:
+            return index
+        if index < first_added + added:
+            return 0x100 + (index - first_added)
+        return index - added
+
     def save(name, img, index):
+        index = uuid_index(index)
         mw, mh = mockup_size(name)
         scale = MENU_SCALE
         if name in MENU_FIT:
