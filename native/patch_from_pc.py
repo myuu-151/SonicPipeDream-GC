@@ -196,13 +196,29 @@ Script.Require("Screens")       -- GAMECUBE: the menus, the loading screen, the 
     for i = 1, STAR_FRAMES do
         self.starFrames[i] = LoadAsset(StarName(sky, i))
     end
-""", """    self.starFrames, self.starAsked, self.window = {}, {}, {}
-    collectgarbage()
-    RefSweep()
-    for i = 1, STAR_FRAMES do
-        self.starAsked[i] = AsyncLoadAsset(StarName(sky, i))
+""", """    self.window = {}
+    self.medleyShown = nil          -- none of its diamond frames yet: the last sky's is not shown again
+    if (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
+        -- THE SAME EIGHT TEXTURES, REFILLED: every sky's star frames are one size and format, so
+        -- the new sky's texels go into the buffers already here (Texture:ReloadFrom, one frame a
+        -- tick, Screens.lua's Sky:HoldStars). Freeing 4 MB of 512 KB frames and allocating 4 MB
+        -- more at every change of stage cut the heap up until frames no longer fitted anywhere.
+        self.starRefill = { sky = sky, next = 1 }
+        self.starsHeld = false
+    else
+        -- the first sky: load it
+        self.starFrames, self.starAsked, self.starRefill = {}, {}, nil
+        self.starsHeld = false      -- not all eight in hand yet: see Sky:StarFrame
+        collectgarbage()
+        RefSweep()
+        for i = 1, STAR_FRAMES do
+            self.starAsked[i] = AsyncLoadAsset(StarName(sky, i))
+        end
     end
 """),
+        # Every sky is on the disc; finding out by LOADING a 512 KB star frame was churn.
+        ("    if (sky < 0 or sky > #SKY_NAMES or LoadAsset(StarName(sky, 1)) == nil) then\n",
+         "    if (sky < 0 or sky > #SKY_NAMES) then\n"),
         ("        local tex = self.starFrames[frame + 1]\n", "        local tex = self:StarFrame(frame + 1)\n"),
         ("local MEDLEY_FRAMES = 384\n",
          "local MEDLEY_EVERY = 1         -- every Nth frame of the PC's show is on the disc\n"

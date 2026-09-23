@@ -47,22 +47,40 @@ on the disc": without it the music does not fit in memory.
 
 ## Where it is
 
-**2026-09-21: stage 1 plays start to emerald in Dolphin at a reported 60 fps.** Not yet run on
-hardware. Dolphin does not model the GPU's speed, so that number says the CPU side is fine and
-nothing about the console's fill rate or triangle budget.
+**2026-09-23: the whole game -- menu, stage select, all seven stages, pause, emeralds saved to the
+memory card -- plays in Dolphin at about 60 fps.** A test build cycled every stage in and out for
+seven and a half minutes (twenty loads) with no failed load. Not yet run on hardware. Dolphin does
+not model the GPU's speed, so that number says the CPU side is fine and nothing about the
+console's fill rate or triangle budget.
+
+MEMORY IS THE WHOLE STORY HERE. A stage, its sky and the menus do not fit together, and even one
+at a time, changing stage over and over used to cut the heap into pieces too small for a pipe
+piece or a star frame. What keeps it working (see Screens.lua, and the engine at or after
+"Consoles: stages that load forever"):
+
+- the menus and a stage are never in memory together: the loading screen is between them
+- the pipe and rings are kept as position and colour only (`Renderer.SetCompactUnlitMeshes`): a
+  stage's pipe is 1.5 MB, not 4.2
+- a change of sky refills the same eight star textures in place (`Texture:ReloadFrom`)
+- Sonic, the HUD and the rings are loaded once, at boot, and kept
+- the engine reads big assets through a small window, builds display lists in small blocks, and
+  keeps freed big blocks for reuse (BigBlockCache_Dolphin.cpp)
 
 | Part | State |
 |---|---|
-| Track, rings, bombs, checks, emerald | In. One palette a stage. A piece is 3,500 to 21,200 triangles; only those within 72 frames ahead are shown. |
+| Stages | All seven, each in its own palette with the PC's checkered pipe, under its own sky, with its own chaos emerald. A piece is 3,500 to 21,200 triangles; only those within 72 frames ahead are shown. |
+| Menus | The PC's menu and stage select, the art sized for a TV (1.25 art pixels a mockup pixel, compressed). The select's preview clip plays for the stage under the cursor only. Menu sounds. |
+| Loading screen | GameCube only (Loading.lua): the stage, its emerald's colour (faint until won) and NOW LOADING, between the stage select and a stage, and back. |
+| Pause | The PC's: Start, then CONTINUE or EXIT to the stage select. |
 | Sonic | In: the PC's 33 meshes as they are (1.7 MB). |
-| Sky | The PC's OWN medley: all 384 frames at 512 x 256, STREAMED. `Sky.lua` asks for the next few frames in the background, shows each as it arrives and lets the old ones go, so about half a megabyte is in memory however big the show is (25 MB cooked on the disc). Holding the sky in memory was tried three ways and looked bad or crashed. |
+| Sky | All eight of the PC's skies (the menu's is Noir). The medley: all 384 frames at 512 x 256, STREAMED. `Sky.lua` asks for the next few frames in the background, shows each as it arrives and lets the old ones go, so about half a megabyte is in memory however big the show is (25 MB cooked on the disc). Holding the sky in memory was tried three ways and looked bad or crashed. |
 | Music | The PC's two tracks, mono 32 kHz Vorbis, streamed from the disc by the engine. |
-| Sound effects | Ring, lose rings, jump, checkpoint, emerald: mono 22 kHz PCM. |
+| Sound effects | Ring, lose rings, jump, checkpoint, emerald, fail, explosion, exit, and the menus' three: mono 22 kHz PCM. |
 | Light | Stronger sun, lower ambient than the PC: the GX renderer has diffuse light only. |
 | HUD | The PC's, whole: SONIC / RINGS, the TOTAL box, START dropping in and scattering, COOL ! and TOO BAD ! with the emblem and glove, in the Sonic font. The art goes in at the size it was drawn (the PC scales it up 4x) and cooks to about 430 KB; the font draws only the glyphs the game prints. Kept 4% clear of the screen's edges for a TV's overscan. One small debug line at the bottom: fps, worst frame, pieces drawn, free memory. |
 | Rings, bombs | The PC's own meshes. The bomb is LIT for real (a swatch texture, no vertex colours): a lit material on a vertex-coloured mesh renders unlit on GX. |
 | Effects | Ring sparkles, the bomb's explosion, drop shadows: the PC's. |
-| Other palettes, marathon | Not yet. |
+| Marathon | Not yet (nor on the PC). |
 
 ## Running it in Dolphin
 

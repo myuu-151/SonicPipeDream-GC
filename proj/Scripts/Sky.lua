@@ -90,7 +90,7 @@ end
 -- Point the frame tables at a sky. The show keeps its place: the medley clock is
 -- not reset, so a change of sky is a change of colour, not a restart.
 function Sky:LoadSky(sky)
-    if (sky < 0 or sky > #SKY_NAMES or LoadAsset(StarName(sky, 1)) == nil) then
+    if (sky < 0 or sky > #SKY_NAMES) then
         Log.Warning("Sky: no sky " .. tostring(sky) .. "; using the classic one")
         sky = 0
     end
@@ -98,11 +98,24 @@ function Sky:LoadSky(sky)
 
     -- Held so the frames are not loaded and unloaded every time one comes back
     -- around.
-    self.starFrames, self.starAsked, self.window = {}, {}, {}
-    collectgarbage()
-    RefSweep()
-    for i = 1, STAR_FRAMES do
-        self.starAsked[i] = AsyncLoadAsset(StarName(sky, i))
+    self.window = {}
+    self.medleyShown = nil          -- none of its diamond frames yet: the last sky's is not shown again
+    if (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
+        -- THE SAME EIGHT TEXTURES, REFILLED: every sky's star frames are one size and format, so
+        -- the new sky's texels go into the buffers already here (Texture:ReloadFrom, one frame a
+        -- tick, Screens.lua's Sky:HoldStars). Freeing 4 MB of 512 KB frames and allocating 4 MB
+        -- more at every change of stage cut the heap up until frames no longer fitted anywhere.
+        self.starRefill = { sky = sky, next = 1 }
+        self.starsHeld = false
+    else
+        -- the first sky: load it
+        self.starFrames, self.starAsked, self.starRefill = {}, {}, nil
+        self.starsHeld = false      -- not all eight in hand yet: see Sky:StarFrame
+        collectgarbage()
+        RefSweep()
+        for i = 1, STAR_FRAMES do
+            self.starAsked[i] = AsyncLoadAsset(StarName(sky, i))
+        end
     end
 
     -- The diamond layer comes in two forms and the generator decides which: the

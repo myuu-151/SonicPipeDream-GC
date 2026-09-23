@@ -27,6 +27,11 @@
 Script.Require("PadInput")
 Script.Require("GcTest")        -- switches for testing in Dolphin; all off unless set there
 
+-- The pipe (and the rings) are vertex-coloured and unlit: kept as position and colour alone they
+-- take a third of the memory -- 1.5 MB a stage instead of 4.2 -- and that headroom is what keeps
+-- the big pieces loading after many changes of stage. (Engine: GxUtils.cpp, BindStaticMesh.)
+if (Renderer.SetCompactUnlitMeshes ~= nil) then Renderer.SetCompactUnlitMeshes(true) end
+
 local STAGES = 7
 local WAIT_AT_MOST = 30.0           -- seconds: a stage starts even if something never arrives,
                                     -- rather than leaving the loading screen up for ever
@@ -66,6 +71,13 @@ end
 
 -- ------------------------------------------------------------------ the menus
 function Sky:ShowMenu()
+    -- What every stage uses -- Sonic, the HUD's art, the rings, the bomb, the effects -- is loaded
+    -- ONCE, here at boot, before anything else, and kept for the whole session (the stage's NODES
+    -- are still torn down between stages; see TeardownStage). Loaded first it sits together at
+    -- the bottom of the heap, out of the way; loaded and freed with each stage it was 3 MB more
+    -- of the churn that cut the heap up.
+    self.kept = {}
+    for _, name in ipairs(BuildAssets()) do self.kept[#self.kept + 1] = LoadAsset(name) end
     self:SpawnLoading()
     self:SpawnMenus(nil)
 end
@@ -141,8 +153,28 @@ function Sky:TickGoing(deltaTime)
             Log.Error("Screens: no StageData" .. g.stage)
             g.stage, data = 1, LoadStageData(1)
         end
-        -- the stage's sky: Sky:LoadSky lets the last one's stars go and asks for these
-        if (data.sky ~= nil) then self.sky = data.sky end
+        -- The stage's sky, changed NOW and before anything of the stage's is asked for: the last
+        -- sky's stars go (4 MB, in eight 512 KB frames) and the new ones are first in the queue.
+        -- Left to UpdateSky's next tick, the stage's pieces were queued ahead of them, took the
+        -- big free blocks, and some star frames never found room: the new sky then twinkled
+        -- between its own frames and the old sky's.
+        if (data.sky ~= nil and data.sky ~= self.shownSky) then
+            self.sky = data.sky
+            self:LoadSky(data.sky)
+            self.fellBack = (self.shownSky ~= data.sky) and data.sky or nil
+        end
+        g.step = 15                             -- the stars first, alone: see step 15
+    elseif (g.step == 15) then
+        -- THE ORDER THINGS COME IN IS THE DIFFERENCE BETWEEN FITTING AND NOT. The heap has
+        -- megabytes free at this point, but in pieces; a star frame needs 512 KB in one block
+        -- (and briefly twice that as it is read), a drop or rise a few blocks of up to 640 KB.
+        -- Asked for together with everything else, the small things landed in the big holes
+        -- first and some star frames never found room (the sky then twinkled half old, half
+        -- new). So: the stars alone, into the heap as the menus left it; then the stage, its
+        -- biggest pieces first. (Nothing else is loading meanwhile: Sky:Tick holds the sky still,
+        -- and its streaming with it, while the loading screen is up.)
+        if (not self:StarsReady() and g.clock < WAIT_AT_MOST) then return end
+        local data = _G["StageData" .. g.stage]
         local names, seen = {}, {}
         local function Want(name)
             if (not seen[name]) then
@@ -159,8 +191,19 @@ function Sky:TickGoing(deltaTime)
         if (TheSpecialStage == nil or not TheSpecialStage.built) then
             for _, name in ipairs(BuildAssets()) do Want(name) end
         end
+        local function Rank(name)
+            if (name:find("Drop") or name:find("Rise")) then return 0 end
+            if (name:find("Corner")) then return 1 end
+            if (name:find("SM_Piece")) then return 2 end
+            return 3
+        end
+        for i, name in ipairs(names) do names[i] = { name = name, rank = Rank(name), at = i } end
+        table.sort(names, function(a, b)
+            if (a.rank ~= b.rank) then return a.rank < b.rank end
+            return a.at < b.at
+        end)
         g.asked = {}
-        for _, name in ipairs(names) do g.asked[#g.asked + 1] = AsyncLoadAsset(name) end
+        for _, n in ipairs(names) do g.asked[#g.asked + 1] = AsyncLoadAsset(n.name) end
         g.step, g.clock = 2, 0.0
     elseif (g.step == 2) then
         local ready = self:StarsReady()
@@ -181,8 +224,11 @@ function Sky:TickGoing(deltaTime)
         end
     elseif (g.step == 3) then
         -- up once the stage has built itself and drawn a frame
+        -- ...and the new sky's first diamond frame is up (the sky runs again from here, and until
+        -- a frame of its own arrives the material still has the last sky's)
         local s = TheSpecialStage
-        if (s ~= nil and s.built and s.data ~= nil and s.stage == g.stage) then
+        local skyUp = (not self.medley) or self.medleyShown ~= nil or g.clock > WAIT_AT_MOST
+        if (s ~= nil and s.built and s.data ~= nil and s.stage == g.stage and skyUp) then
             g.step = 4
         end
     else
@@ -196,11 +242,10 @@ end
 -- music stopped. On the PC what it keeps between stages -- Sonic, the HUD, the ring and bomb
 -- nodes, the music -- stays, hidden, for next time.
 --
--- HERE ALL OF IT GOES. Kept, it pinned itself in the middle of the heap: the stage select's art
--- then went into the holes the pipe left, and the next time into a stage the biggest pipe
--- pieces (a drop is 1.3 MB once loaded, in three blocks of up to 640 KB) found no block big
--- enough. Stage 7, entered a second time, died loading its drop. Torn down whole, every entry
--- into a stage starts from the heap the first one did, and the first one fits.
+-- HERE THE NODES ALL GO, and the stage's own pipe, data and emerald with them; the assets every
+-- stage shares stay loaded (Sky:ShowMenu keeps them, loaded at boot). What must not happen is
+-- the heap being cut up between stages: see ShowMenu, Sky.lua's LoadSky (the stars are refilled
+-- in place) and the engine's BigBlockCache_Dolphin.cpp.
 function Sky:TeardownStage()
     local s = TheSpecialStage
     if (s ~= nil) then
@@ -256,24 +301,65 @@ end
 
 -- ------------------------------------------------------------------ the sky's stars
 -- Sky.lua (patched) asks for a sky's 8 star frames in the background; these read them back.
+-- Nothing until ALL EIGHT have arrived: a twinkle through some of the new sky's frames and
+-- some of the old's (the material keeps the last one it was given) is the two skies clashing.
 function Sky:StarFrame(i)
-    local tex = self.starFrames[i]
-    if (tex == nil and self.starAsked ~= nil and self.starAsked[i] ~= nil and self.starAsked[i]:IsLoaded()) then
-        tex = LoadAsset(self.starName(self.shownSky, i))
-        self.starFrames[i] = tex
-    end
-    return tex
+    if (not self.starsHeld) then return nil end
+    return self.starFrames[i]
 end
 
--- All of the sky on show has arrived (or it is not asking for anything).
+-- Take each star frame in hand (LoadAsset) THE TICK IT ARRIVES, before anything else in the
+-- tick runs. What AsyncLoadAsset hands back does not keep the asset alive, and the sky's own
+-- streaming sweeps unheld assets several times a second (Sky.lua's medley): a frame that
+-- arrived and was swept before it was taken was simply gone, and its handle never said
+-- loaded again -- 3 of the 8 went missing like that, and the sky twinkled between its own
+-- frames and the last sky's. A frame still missing after a while is asked for again.
+local STAR_ASK_AGAIN = 1.5          -- seconds
+function Sky:HoldStars(deltaTime)
+    if (self.starRefill ~= nil) then
+        -- a change of sky: the eight textures refilled in place, one a tick (see Sky.lua's LoadSky)
+        local r = self.starRefill
+        if (self.starFrames[r.next]:ReloadFrom(self.starName(r.sky, r.next))) then
+            r.next = r.next + 1
+            if (r.next > #self.starFrames) then
+                self.starRefill, self.starsHeld = nil, true
+                self.frame = -1                 -- the new stars go up on this tick
+            end
+        else
+            -- could not (the engine refuses a different size or format): load them afresh
+            Log.Warning("Sky: star frames not refilled in place; loading them")
+            self.starRefill = nil
+            self.starFrames, self.starAsked = {}, {}
+            collectgarbage()
+            RefSweep()
+            for i = 1, 8 do self.starAsked[i] = AsyncLoadAsset(self.starName(r.sky, i)) end
+        end
+        return
+    end
+    if (self.starsHeld or self.starAsked == nil) then return end
+    self.starWait = (self.starWait or 0.0) + deltaTime
+    local all = true
+    for k, asked in pairs(self.starAsked) do
+        if (self.starFrames[k] == nil) then
+            if (asked:IsLoaded()) then
+                self.starFrames[k] = LoadAsset(self.starName(self.shownSky, k))
+            elseif (self.starWait >= STAR_ASK_AGAIN) then
+                self.starAsked[k] = AsyncLoadAsset(self.starName(self.shownSky, k))
+            end
+        end
+        if (self.starFrames[k] == nil) then all = false end
+    end
+    if (self.starWait >= STAR_ASK_AGAIN) then self.starWait = 0.0 end
+    self.starsHeld = all
+    if (all) then self.frame = -1 end           -- the new stars go up on this tick
+end
+
+-- All of the sky on show has arrived.
 function Sky:StarsReady()
     if (self.sky ~= self.shownSky and not (self.shownSky == 0 and self.fellBack == math.floor(self.sky))) then
         return false                            -- asked for, not yet taken up by UpdateSky
     end
-    for _, a in pairs(self.starAsked or {}) do
-        if (not a:IsLoaded()) then return false end
-    end
-    return true
+    return self.starsHeld
 end
 
 -- ------------------------------------------------------------------ testing
@@ -359,7 +445,12 @@ end
 
 local pcTick = Sky.Tick
 function Sky:Tick(deltaTime)
-    pcTick(self, deltaTime)
+    self:HoldStars(deltaTime)                   -- first: see HoldStars
+    -- The sky stands still under the loading screen (it cannot be seen): its diamond show
+    -- streams frames in and out all the time, and in the middle of a load those small blocks
+    -- were cutting up the big holes the stage's pieces and the new stars need.
+    local loading = (self.going ~= nil and self.going.step < 3) or self.returning ~= nil
+    if (not loading) then pcTick(self, deltaTime) end
     if (self.going ~= nil) then self:TickGoing(deltaTime) end
     if (self.returning ~= nil) then self:TickReturning(deltaTime) end
     self:TestExit(deltaTime)
