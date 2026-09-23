@@ -38,7 +38,8 @@ EFFECT_RATE = 22050
 # file in the PC's external/audio, asset name, uuid: the names and uuids are the PC's, so the
 # scripts find the same assets on both machines
 MUSIC = [("ss_intro.wav", "SW_SpecialStage_Intro", 0x51C0FFEE00300001),
-         ("ss_loop.wav", "SW_SpecialStage_Loop", 0x51C0FFEE00300002)]
+         ("ss_loop.wav", "SW_SpecialStage_Loop", 0x51C0FFEE00300002),
+         ("stage1.wav", "SW_SpecialStage_Stage1", 0x51C0FFEE00300003)]
 EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_LoseRings", 0x51C0FFEE00300011),
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),
