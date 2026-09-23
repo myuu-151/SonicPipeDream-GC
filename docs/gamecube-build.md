@@ -1,8 +1,9 @@
 # The GameCube build
 
 How this port is made from the PC repo, how to build the disc image, and why it is shaped the way it is.
+Everything that had to change to run on the console is in [gamecube-fixes.md](gamecube-fixes.md).
 
-The GameCube build of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipeDream), a 3D take on
+The GameCube build of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipeDream), a 3D half-pipe racer born from
 Sonic 2's special stage on the Octave engine.
 
 **This repo designs nothing.** The PC repo owns the stage generator, the ring modules, the stage
