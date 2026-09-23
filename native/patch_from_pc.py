@@ -16,6 +16,11 @@ SRC = os.path.abspath(os.path.join(HERE, "..", "..", "Sonic2Special3D", "proj", 
 OUT = os.path.abspath(os.path.join(HERE, "..", "proj", "Scripts", "SpecialStage.lua"))
 
 CHANGES = [
+    # SONIC'S BALL DOES NOT ROLL HERE: its gloss is painted into its vertices (export_gc.py,
+    # write_ball), lit from above and ahead, so the ball keeps the track's up and forward. The PC's
+    # ball is a plain lit sphere, whose roll was never visible anyway.
+    ("""        self.player:SetWorldRotationQuat(FacingQuat(Turn(fwdHere), Turn(upHere)))""",
+     """        self.player:SetWorldRotationQuat(FacingQuat(fwdHere, upHere))      -- GAMECUBE: no roll (painted gloss)"""),
     # -- the header says which script this is
     ("""-- SpecialStage.lua
 -- A basic playable special stage.

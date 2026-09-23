@@ -69,7 +69,7 @@ PATH_SAMPLES = 32
 # (A brighter version -- the diffuse lifted 1.3x, a sharper and stronger highlight -- was tried to
 # chase the PC's brighter orange. The darker one here was preferred, so this is it.)
 
-def write_painted_gloss(name, index, mesh, colour_of_slot, keep_slot, path):
+def write_painted_gloss(name, index, mesh, colour_of_slot, keep_slot, path, light_ahead=0.25):
     Vector = pc["Vector"]
     if path is not None:
         frames = [path.frame(path.length * i / PATH_SAMPLES) for i in range(PATH_SAMPLES + 1)]
@@ -85,7 +85,7 @@ def write_painted_gloss(name, index, mesh, colour_of_slot, keep_slot, path):
         axis = origin + up * radius                         # the middle of the pipe, level with here
         inward = (axis - p)
         inward = inward.normalized() if (path is not None and inward.length > 1e-6) else up
-        light = (up + fwd * 0.25).normalized()
+        light = (up + fwd * light_ahead).normalized()      # (negative: from behind, the camera's side)
         eye = (-fwd + inward * 0.35).normalized()
         half = (light + eye).normalized()
         diffuse = PC_AMBIENT + PC_SUN * max(0.0, n.dot(light))
@@ -130,6 +130,24 @@ def write_painted_gloss(name, index, mesh, colour_of_slot, keep_slot, path):
     d += f32(centre.x) + f32(centre.y) + f32(centre.z) + f32(far)
     open(os.path.join(ASSETS, name + ".oct"), "wb").write(d)
     return len(idx) // 3
+
+
+# SONIC'S BALL, its gloss painted on too. On the PC it is lit and shiny (M_StageGloss); here a lit
+# material on vertex colours comes out unlit, and the ball was a flat blue disc. Painted as a thing
+# standing on the pipe (write_painted_gloss with no path): its own X up the track, Z away from the
+# surface -- which is how the ball is turned in the air here, where it does NOT roll (the patch in
+# patch_from_pc.py; a roll would carry the highlight round with it, and on a plain sphere the roll
+# itself was never visible). Subdivided once more than before, so the highlight has vertices to sit on.
+# The ball's light comes from BEHIND and above (the arch spheres' is a little ahead), which brings
+# its highlight down off the top of the ball onto the side the camera sees: about 40 degrees up,
+# not 60.
+BALL_LIGHT_AHEAD = -0.6
+
+
+def write_ball():
+    write_painted_gloss("SM_PlayerBall", 221,
+                        simple("Ball", lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=3, radius=1.7)),
+                        lambda k: (0.12, 0.30, 0.95), lambda k: True, None, light_ahead=BALL_LIGHT_AHEAD)
 
 
 # --- really lit -----------------------------------------------------------------------------
@@ -275,8 +293,7 @@ def main():
                                  "T_Bomb", "M_Bomb", size=size, basic=pc["BOMB_BASIC_LIT"])
     else:
         write_lit_swatched("SM_Bomb", 0, bomb, bomb_colours)
-    write_mesh("SM_PlayerBall", 221, simple("Ball", lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.7)),
-               lambda k: (0.12, 0.30, 0.95))
+    write_ball()
     write_mesh("SM_Emerald", 222, simple("Emerald", pc["octahedron"]), lambda k: (0.10, 0.85, 0.95))
     pc["write_shadow"]()            # the drop shadow blob: the PC's, as it is
 

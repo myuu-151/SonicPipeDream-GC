@@ -1264,7 +1264,7 @@ function SpecialStage:Tick(deltaTime)
             local c, sn = math.cos(self.spin), math.sin(self.spin)
             return Add(Add(Scale(v, c), Scale(Cross(axis, v), sn)), Scale(axis, Dot(axis, v) * (1.0 - c)))
         end
-        self.player:SetWorldRotationQuat(FacingQuat(Turn(fwdHere), Turn(upHere)))
+        self.player:SetWorldRotationQuat(FacingQuat(fwdHere, upHere))      -- GAMECUBE: no roll (painted gloss)
     elseif (airborne) then
         -- dropped off the wall: he swings upright as the fall starts, and falls feet first
         -- (turned about the track's forward, so upside down at the start is no trouble)
