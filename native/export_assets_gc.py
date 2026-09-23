@@ -290,7 +290,7 @@ MENU_FIT = {"T_Menu_Circles": 256}          # at most this, a side: the circles 
 # spaced four rows 53 apart down to y 300, and the watermark runs along under them from 344; five
 # at that spacing would run into it. So all five are spaced again, evenly, MENU_ROW_GAP apart
 # centre to centre, from where the first row's centre is.
-MENU_EXTRA_ITEMS = [("save", "item_save")]
+MENU_EXTRA_ITEMS = []                   # (SAVE is the PC's now too; LOAD, the PC's alone, is left out)
 MENU_FIRST_CENTRE = 120.0
 MENU_ROW_GAP = 50.0
 
@@ -305,7 +305,7 @@ def menu():
     layout = json.load(open(os.path.join(pm.PARTS, "layout.json")))
     where = {p["name"]: p for p in layout["parts"]}
 
-    pm.ITEMS = list(pm.ITEMS) + MENU_EXTRA_ITEMS
+    pm.ITEMS = [it for it in pm.ITEMS if it[0] != "load"] + MENU_EXTRA_ITEMS
     for i, (_key, part) in enumerate(pm.ITEMS):
         row = where.get(part) or where[pm.ROW_OF.get(part, "item_options")]
         h = Image.open(os.path.join(pm.PARTS, part + ".png")).height
@@ -343,7 +343,7 @@ def menu():
         return index - added
 
     def save(name, img, index):
-        index = uuid_index(index)
+        index = pm.uuid_index(index)       # the PC's numbering, which gives added items their own
         mw, mh = mockup_size(name)
         scale = MENU_SCALE
         if name in MENU_FIT:

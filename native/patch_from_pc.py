@@ -154,7 +154,8 @@ end
 # Scripts that are the PC's with a change or two (or none).
 OTHERS = {
     "SpecialStageMusic.lua": [],
-    "PadInput.lua": [],             # the controller, the PC's (which began as this build's own)
+    "PadInput.lua": [],
+    "SavePrompt.lua": [],           # the PC's; it speaks of slot A here, of the Saves folder there             # the controller, the PC's (which began as this build's own)
     # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
     # clear of the edges.
     "SpecialStageUI.lua": [("local SAFE_MARGIN = 0.0\n", "local SAFE_MARGIN = 0.04\n")],
@@ -332,8 +333,8 @@ end
     self:Show(self.open)
 end
 """),
-        # SAVE, the fifth item, is the GameCube's own (export_assets_gc.py adds its art and
-        # row): it opens the memory card prompt, SavePrompt.lua.
+        # SAVE (the PC's too now) opens SavePrompt.lua, which talks about slot A here; the PC's
+        # LOAD is left off this menu (export_assets_gc.py), as the card is read at startup.
         # MARATHON stays shut here: the PC plays one made ahead of time, and this machine has
         # neither the memory for that nor (yet) the zones built on the fly.
         ("""-- MARATHON is always open, by the owner's decision for now (it was to wait for the seventh
@@ -341,18 +342,8 @@ end
 """, """-- MARATHON is open on the PC; here it stays SHUT (patch_from_pc.py): this machine has neither the
 -- memory for a marathon made ahead of time nor, yet, the zones built on the fly.
 """),
-        ("""local UNLOCKED = { main_game = true, marathon = true, extras = false, chao_garden = false }""",
-         """local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false, save = true }"""),
-        # While the save prompt is up the menu shows, but takes no input: the prompt has it.
-        ("""    self:ScrollWatermark(deltaTime)
-    self:BlinkCursor(deltaTime)
-""", """    self:ScrollWatermark(deltaTime)
-    self:BlinkCursor(deltaTime)
-    if (self.busy) then
-        self.armed = false                  -- and the key that closes the prompt is not a choice
-        return
-    end
-"""),
+        ("""local UNLOCKED = { main_game = true, marathon = true, extras = false, chao_garden = false,""",
+         """local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false,"""),
     ],
     # The stage select is the PC's, but for its previews. Each is a clip of 16 frames, and the PC
     # loads all seven stages' clips at once: 112 pictures, 3.5 MB here. So only the stage under
@@ -361,26 +352,6 @@ end
     # it for a moment -- not for every stage it passes on the way -- and the last stage's are let
     # go first. The clip plays as its frames arrive.
     "StageSelect.lua": [
-        # NOTHING IS WRITTEN TO A MEMORY CARD UNASKED. The PC saves each emerald as it is won;
-        # here that would make a file on the player's card without a word. The first save is made
-        # from the menu's SAVE (SavePrompt.lua, which says what is in slot A and how many blocks
-        # it needs); after that the file is there and each emerald won is saved into it.
-        ("""function StageSelect:SaveWon()
-    if (System == nil or System.WriteSave == nil) then return end
-    local text = ""
-    for i = 1, STAGES do text = text .. (self.won[i] and "1" or "0") end
-    local stream = Stream.Create()
-    stream:WriteString(text)
-    System.WriteSave(SAVE, stream)
-end""", """function StageSelect:SaveWon(asked)
-    if (System == nil or System.WriteSave == nil) then return false end
-    if (not asked and not System.DoesSaveExist(SAVE)) then return false end
-    local text = ""
-    for i = 1, STAGES do text = text .. (self.won[i] and "1" or "0") end
-    local stream = Stream.Create()
-    stream:WriteString(text)
-    return System.WriteSave(SAVE, stream) and true or false
-end"""),
         ("""    self.previewClip = {}
     local frames = (MenuLayout ~= nil and MenuLayout.preview_frames) or 1
     for i = 1, STAGES do

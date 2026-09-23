@@ -110,6 +110,8 @@ function StageSelect:LoadWon()
     end
 end
 
+-- NOTHING IS WRITTEN UNASKED, the GameCube's way: the first save is made from the menu's SAVE
+-- (SavePrompt.lua); after that the file is there and each emerald won is saved into it.
 function StageSelect:SaveWon(asked)
     if (System == nil or System.WriteSave == nil) then return false end
     if (not asked and not System.DoesSaveExist(SAVE)) then return false end

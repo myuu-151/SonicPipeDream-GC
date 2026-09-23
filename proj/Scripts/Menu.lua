@@ -38,7 +38,8 @@ local WHITE = Vec(1.0, 1.0, 1.0, 1.0)
 -- Which items can be chosen. Marathon is switched on by the game when the gauntlet is done.
 -- MARATHON is open on the PC; here it stays SHUT (patch_from_pc.py): this machine has neither the
 -- memory for a marathon made ahead of time nor, yet, the zones built on the fly.
-local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false, save = true }
+local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false,
+                   save = true, load = true }       -- SavePrompt.lua
 
 local REPEAT_FIRST, REPEAT_AFTER = 0.40, 0.12       -- held up/down: the first wait, then the rest
 
@@ -282,6 +283,7 @@ function Menu:Tick(deltaTime)
     if (not self.open) then return end
     self:ScrollWatermark(deltaTime)
     self:BlinkCursor(deltaTime)
+    -- While the save prompt is up the menu shows, but takes no input: the prompt has it.
     if (self.busy) then
         self.armed = false                  -- and the key that closes the prompt is not a choice
         return
