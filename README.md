@@ -1,8 +1,8 @@
 ![Sonic Pipe Dream](docs/header.png)
 
-# Sonic2Special3D-GC
+# Sonic Pipe Dream (GameCube)
 
-The GameCube build of [Sonic2Special3D](https://github.com/myuu-151/Sonic2Special3D), a 3D take on
+The GameCube build of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipeDream), a 3D take on
 Sonic 2's special stage on the Octave engine.
 
 **This repo designs nothing.** The PC repo owns the stage generator, the ring modules, the stage
