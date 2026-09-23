@@ -312,9 +312,9 @@ def main():
         m = chain.frame(min(f * rm.STEP, chain.length))
         path_list.append(list(to_octave(m.translation)) + list(to_octave(m.col[0].xyz)) + list(to_octave(m.col[2].xyz)))
     sections = []
-    for sec in data["sections"]:
+    for sec, (quota, asks) in zip(data["sections"], pc["check_numbers"](STAGE, data["sections"])):     # the PC's checks
         sections.append(dict(first_frame=sec["first_frame"], check_frame=sec["check_frame"], last_frame=sec["last_frame"],
-                             quota=sec["quota"], asks=sec["asks"], rings=sec["rings"], leads_to=sec["leads_to"],
+                             quota=quota, asks=asks, rings=sec["rings"], leads_to=sec["leads_to"],
                              objects=[[o[0], o[1], 1 if o[2] == rm.BOMB else 0] for o in sec["objects"]]))
     arch = data["sections"][0]["ring_check"]["rainbow_arch"]
     table = dict(
