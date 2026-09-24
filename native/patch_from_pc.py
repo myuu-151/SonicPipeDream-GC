@@ -155,7 +155,8 @@ end
 OTHERS = {
     "SpecialStageMusic.lua": [],
     "PadInput.lua": [],
-    "SavePrompt.lua": [],           # the PC's; it speaks of slot A here, of the Saves folder there             # the controller, the PC's (which began as this build's own)
+    "SavePrompt.lua": [],
+    "Loading.lua": [],              # the PC's (which began as this build's own); scaled, so the same here           # the PC's; it speaks of slot A here, of the Saves folder there             # the controller, the PC's (which began as this build's own)
     # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
     # clear of the edges.
     "SpecialStageUI.lua": [("local SAFE_MARGIN = 0.0\n", "local SAFE_MARGIN = 0.04\n")],

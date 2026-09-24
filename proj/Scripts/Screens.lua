@@ -30,7 +30,7 @@ Script.Require("SaveInfo")      -- the save's name and icon on the memory card s
 
 -- Every save written from here on carries them (engine: System_Dolphin.cpp, SYS_WriteSave).
 if (System.SetSaveInfo ~= nil and SaveInfo ~= nil) then
-    System.SetSaveInfo(SaveInfo.title, SaveInfo.description, SaveInfo.icon)
+    System.SetSaveInfo(SaveInfo.title, SaveInfo.description, SaveInfo.icon, SaveInfo.banner)
 end
 
 -- The pipe (and the rings) are vertex-coloured and unlit: kept as position and colour alone they
@@ -121,10 +121,10 @@ function Sky:SpawnMenus(selectAt)
         if (key == "main_game") then
             TheMenu:Close()
             TheStageSelect:Open()
-        elseif (key == "save") then
+        elseif (key == "save" or key == "load") then
             -- the memory card prompt, over the menu; the menu keeps still until it closes
             TheMenu.busy = true
-            TheSavePrompt:Open()
+            TheSavePrompt:Open(key)
         end
     end
     TheSavePrompt.onClose = function() TheMenu.busy = false end

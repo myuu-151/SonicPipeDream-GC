@@ -1,4 +1,7 @@
--- Loading.lua (GAMECUBE ONLY: this file is not made from the PC repo)
+-- FROM the PC repo, by native/patch_from_pc.py. Change it there.
+-- Loading.lua
+-- (It began as the GameCube build's own; the PC's marathon uses it too now. Sized for a 480-line
+-- television and scaled with the window, so on the GameCube it is as it always was.)
 --
 -- The screen between the stage select and a stage, and back. The PC goes straight from one to
 -- the other, because it keeps everything in memory at once. This machine cannot: the menus and a
@@ -12,9 +15,10 @@
 --                                                    NOW LOADING
 --
 -- The emerald is the stage select's: in colour once it has been won, its black shadow until
--- then. Going back to the menus there is no stage to name, and only NOW LOADING shows.
+-- then. Going back to the menus there is no stage to name, and only NOW LOADING shows. Going into
+-- a MARATHON it says so, over the emerald its first zone leads to.
 --
---     TheLoading:Show(stage, won)    stage nil: NOW LOADING alone
+--     TheLoading:Show(stage, won)    stage nil: NOW LOADING alone; "marathon": the marathon's
 --     TheLoading:Hide()
 
 Loading = {}
@@ -34,6 +38,7 @@ local EMERALD_COLOUR = {
     Vec(1.00, 1.00, 1.00, 1.0),
 }
 local BLINK = 0.45                          -- NOW LOADING: on, then off, this long each
+local REF_H = 480.0                         -- the height it is drawn for (the GameCube's); scaled to others
 local MARGIN = 0.06                         -- of the screen kept clear at the edges: a TV's overscan
 
 local function MakeText(parent, font, size)
@@ -73,6 +78,7 @@ function Loading:Build()
     self.title = MakeText(self, font, 44.0)
     self.name = MakeText(self, font, 24.0)
     self.wait = MakeText(self, font, 18.0)
+    self.font = font
     self.wait:SetText("NOW LOADING")
     -- a line for testing (GcTest.free): what has arrived, and free memory
     self.debug = self:CreateChild("Text")
@@ -89,12 +95,22 @@ end
 -- Text is centred by its measured width, which is only known once it has been drawn: so every
 -- tick while it shows.
 function Loading:Place()
+    local res = Renderer.GetScreenResolution()
+    if (res.x ~= self.w or res.y ~= self.h) then        -- (a PC window can change size)
+        self.w, self.h = res.x, res.y
+        self:SetDimensions(self.w, self.h)
+        self.back:SetDimensions(self.w, self.h)
+    end
+    local k = self.h / REF_H
+    self.title:SetTextSize(44.0 * k)
+    self.name:SetTextSize(24.0 * k)
+    self.wait:SetTextSize(18.0 * k)
     local function Centre(t, y)
         local wide = (t.GetTextWidth ~= nil) and t:GetTextWidth() or 0.0
         t:SetPosition((self.w - wide) * 0.5, y)
     end
-    local gemW, gemH = 76.0, 60.0           -- the select's emerald at twice its size there
-    self.gem:SetPosition((self.w - gemW) * 0.5, self.h * 0.5 - 118.0)
+    local gemW, gemH = 76.0 * k, 60.0 * k   -- the select's emerald at twice its size there
+    self.gem:SetPosition((self.w - gemW) * 0.5, self.h * 0.5 - 118.0 * k)
     -- the texture is padded to 64 x 32 with the gem's 38 x 30 at its top left (MenuLayout.lua)
     local part = MenuLayout ~= nil and MenuLayout.parts.T_Menu_Emerald1
     if (part ~= nil) then
@@ -102,10 +118,10 @@ function Loading:Place()
     else
         self.gem:SetDimensions(gemW, gemH)
     end
-    Centre(self.title, self.h * 0.5 - 44.0)
-    Centre(self.name, self.h * 0.5 + 10.0)
+    Centre(self.title, self.h * 0.5 - 44.0 * k)
+    Centre(self.name, self.h * 0.5 + 10.0 * k)
     local wide = (self.wait.GetTextWidth ~= nil) and self.wait:GetTextWidth() or 0.0
-    self.wait:SetPosition(self.w * (1.0 - MARGIN) - wide, self.h * (1.0 - MARGIN) - 22.0)
+    self.wait:SetPosition(self.w * (1.0 - MARGIN) - wide, self.h * (1.0 - MARGIN) - 22.0 * k)
 end
 
 function Loading:Refresh()
@@ -116,7 +132,14 @@ function Loading:Refresh()
     self.title:SetVisible(named)
     self.name:SetVisible(named)
     self.gem:SetVisible(named)
-    if (named) then
+    if (named and n == "marathon") then
+        -- the emerald the first zone leads to (SpecialStage.lua's SpawnItem: the first of them)
+        self.title:SetText("MARATHON")
+        self.name:SetText(EMERALD_NAME[1])
+        self.name:SetColor(EMERALD_COLOUR[1])
+        self.gem:SetTexture(LoadAsset("T_Menu_Emerald1"))
+        self.gem:SetColor(WHITE)
+    elseif (named) then
         self.title:SetText("STAGE " .. n)
         self.name:SetText(EMERALD_NAME[n] or "")
         self.name:SetColor(EMERALD_COLOUR[n] or WHITE)
