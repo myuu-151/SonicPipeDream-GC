@@ -226,6 +226,28 @@ function Sky:GoToMarathon(run)
     self.going = { stage = "Marathon", step = 0, clock = 0.0, seed = seed, palette = palette }
 end
 
+-- GcTest.perf: the stage's parts timed one by one, for the perf log's LUA lines (engine:
+-- System.PerfBegin/PerfEnd; every script's whole Tick is timed there already). Each method is
+-- wrapped on the stage itself, so the PC's script is untouched. Three results are passed back
+-- as they are, not packed into a table: the wrapper must not make garbage of its own.
+local STAGE_PARTS = { "UpdateObjects", "UpdatePieces", "Collide", "PassChecks", "UpdateUI",
+                      "SpinFx", "UpdateFx", "TraceTube", "TraceMesh", "TickFade", "TickMarathonGen" }
+function TimeStageParts(stage)
+    if (System.PerfBegin == nil or stage.partsTimed) then return end
+    stage.partsTimed = true
+    for _, name in ipairs(STAGE_PARTS) do
+        local f = stage[name]
+        if (f ~= nil) then
+            stage[name] = function(...)
+                System.PerfBegin(name)
+                local a, b, c = f(...)
+                System.PerfEnd()
+                return a, b, c
+            end
+        end
+    end
+end
+
 -- The stage started, the loading screen still up over it.
 function Sky:StartGoing(g)
     self:StartSpecialStage(g.stage)
@@ -233,6 +255,7 @@ function Sky:StartGoing(g)
     -- loading screen has to be moved back over it in the same frame, or the HUD shows
     -- through it for a frame.
     if (not TheSpecialStage.built) then TheSpecialStage:Build() end
+    if (GcTest.perf) then TimeStageParts(TheSpecialStage) end
     self.loadingNode:Attach(self:GetWorld():GetRootNode(), false)
     if (g.stage == "Marathon") then
         TheSpecialStage.onExit = function() self:BackToSelect(nil) end

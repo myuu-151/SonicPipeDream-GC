@@ -204,16 +204,29 @@ function Sky:UpdateSky(deltaTime)
 
         -- Let go of the ones gone by: all but the frame on show and the one before it, which
         -- the material may still be drawing with. LETTING GO IS NOT FREEING. The engine frees a
-        -- frame when nothing refers to it, and these tables' entries go on referring to it until
+        -- frame when nothing refers to it, and a dropped handle goes on referring to it until
         -- Lua's collector has been round: asking the engine to unload one straight away is
-        -- refused ("still has 1 refs"), every frame stays, and the memory runs out. So: drop
-        -- them, and every few, run the collector and then have the engine sweep what is unheld.
-        for i, _ in pairs(self.window) do
+        -- refused ("still has 1 refs"), every frame stays, and the memory runs out. So each
+        -- frame's handles are RELEASED as it goes (Asset:Release), and the engine sweeps what
+        -- is unheld. (It used to run a full collection every four frames instead: on hardware,
+        -- now and then 30-40 ms in one frame, a hitch you could see.) An engine without Release
+        -- still gets the collection.
+        for i, w in pairs(self.window) do
             local behind = (cur + 1 - i) % MEDLEY_FRAMES
             if (behind > 1 and behind < MEDLEY_FRAMES - MEDLEY_AHEAD - 1) then
+                if (w.asked ~= nil and w.asked.Release ~= nil) then
+                    w.asked:Release()
+                    if (w.tex ~= nil) then w.tex:Release() end
+                    self.released = (self.released or 0) + 1
+                else
+                    self.dropped = (self.dropped or 0) + 1
+                end
                 self.window[i] = nil
-                self.dropped = (self.dropped or 0) + 1
             end
+        end
+        if ((self.released or 0) >= 2) then
+            self.released = 0
+            RefSweep()
         end
         if ((self.dropped or 0) >= 4) then
             self.dropped = 0

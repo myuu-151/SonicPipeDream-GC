@@ -18,5 +18,8 @@
 --     holdTo = n        ...always to palette n (else the next one round)
 --     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)
 --     spin = seconds    a spin dash that long into a stage, and every 8 s after (S2_TEST_SPIN)
+--     readout = true    fps, the worst frame, pieces drawn and free memory, on screen in a stage
+--     perf = true       the stage's parts timed one by one into the SD perf log's LUA lines
+--                       (Screens.lua TimeStageParts; needs a log build)
 
 GcTest = {}

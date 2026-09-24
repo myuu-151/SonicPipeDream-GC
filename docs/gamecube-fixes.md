@@ -110,6 +110,23 @@ and carry on (the loading screen waits up to 30 seconds for anything that never 
   without telling the handles waiting on it: they waited for ever, and the loading screen with
   them. It now hands them the loaded asset and frees its duplicate (engine 3f75d15d).
 
+## Frame rate on hardware (2026-09-24)
+
+About 28 fps with stutter at first; 55-60 fps after, measured each step from the SD perf log
+(a log build: `IsoLog_local.h` in the engine, `GcTest.perf` for the stage's parts):
+
+- **Music hitches (83-117 ms):** a 16 KB music read on the main thread queued behind the sky's
+  64 KB frames on the SD lock. The engine reads music ahead on its own thread now, and the asset
+  loader runs below the main thread.
+- **The GPU (the 28 fps):** meshes are sent as triangle strips (about 1.4 vertices a triangle, not
+  3), and the CPU works on the next frame while the GPU draws this one. The GPU is no longer the limit.
+- **Every five seconds:** the perf log's own SD write. Now written by a background thread.
+- **The sky (30-40 ms now and then):** a full `collectgarbage()` every few streamed frames. Frames
+  are released at once now (`asset:Release()`, the sky's patch in `patch_from_pc.py`).
+- **The trace tube and ring sparkles:** tables made every frame for every ring and sparkle (up to
+  ~16 KB of garbage a frame). The PC's `TraceMesh` and `UpdateFx` use plain numbers now
+  (`PlaceXYZ`, `SetWorldPositionXYZ`), proved identical to the old code in a side-by-side run.
+
 ## Other GameCube differences
 
 - **The pad** (`PadInput.lua`): the PC scripts only ask about keys, so the pad is folded into
