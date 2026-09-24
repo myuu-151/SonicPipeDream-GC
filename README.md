@@ -11,36 +11,46 @@ The GameCube version of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipe
 Sonic down a twisting half-pipe that hangs in a sky full of shifting diamonds, grab the rings,
 dodge the bombs, and pass all three ring checks to win each stage's chaos emerald.
 
-It is the whole game, on a machine with 24 MB of memory: the same seven stages, the same menus,
-skies and music, running at 60 frames a second.
+It is the whole game, on a machine with 24 MB of memory: the same seven stages, Marathon and Time
+Attack, the same menus, skies and music, at 55-60 frames a second on a real GameCube.
 
 ## Features
 
-- **Seven stages**, each with its own track, its own pipe colours, its own sky and its own chaos
-  emerald.
+- **Seven stages**, each with its own track, its own pipe colours, its own sky, its own music and
+  its own chaos emerald.
+- **Marathon**: one run made as you play it, a new one every time, built on the console while you
+  run. Zone after zone, it gets harder as it goes, and after every zone the pipe and the sky change
+  colour while Sonic takes a victory lap. Play 1 to 20 zones or go on without end, and choose how
+  hard it starts, how fast it climbs and how many spare rings it gives you.
+- **Time Attack**: the marathon against a clock that counts down. Every check passed puts time
+  back. Rings only save you from a hit, and a hit takes them all; with no rings, a hit costs a life.
 - **Run anywhere round the pipe**, wind up speed by holding a direction, leap across to the far
-  wall or drop dash straight back down.
+  wall, drop dash straight back down, or hold jump through a landing to bounce highest.
+- **Spin dash.** Curl up and skid to a stop, rev, and let go to blast off down the pipe.
 - **Eight animated skies**, streamed from the disc as they play.
 - **A stage select** with a moving preview of every stage.
-- **Save** from the title menu to the memory card in slot A (1 block, with its own icon). After
-  that, every emerald you win is saved as you win it.
-- **Music** streamed from the disc, and the full set of sound effects.
-- **Coming:** Marathon, one endless run that gets harder as it goes.
+- **Save and Load** from the title menu, to the memory card in slot A (1 block, with its own icon
+  and banner). After the first save, every emerald you win is saved as you win it.
+- **Music** streamed from the disc, the full set of sound effects, and **Options** to turn off the
+  music in the stages.
 
 ## Controls
 
 | | Menus | Stage |
 |---|---|---|
 | Stick or d-pad | Move the highlight | Steer round the pipe |
-| A | Choose | Jump; again in the air to drop dash |
-| B | Back, on the stage select | |
+| A | Choose | Jump; again in the air to drop dash; hold through a landing to bounce highest |
+| R (hold) | | Spin dash: skid to a stop, press A to rev, let go of R to blast off |
+| B | Back | |
 | Start | Choose | Pause: Continue or Exit |
 
 ## Playing it
 
 Download the disc image from [Releases](https://github.com/myuu-151/SonicPipeDream-GC/releases)
 (or build it as described in [docs/gamecube-build.md](docs/gamecube-build.md)), then run it in
-Dolphin or on a GameCube that can load disc images. It has not yet been tried on real hardware.
+Dolphin or on a GameCube that can load disc images. On a real GameCube it is played from an SD
+card (the image on the card, loaded through Swiss); an SD adapter that supports DMA reads it
+fastest.
 
 **In Dolphin, use DSP LLE** (game settings: `[Core] DSPHLE = False`). With DSP HLE the game
 freezes about 25 seconds in; the details are in the build notes.
@@ -48,7 +58,7 @@ freezes about 25 seconds in; the details are in the build notes.
 ## More
 
 - [docs/gamecube-build.md](docs/gamecube-build.md): how the port is made from the PC repo, and how to build it.
-- [docs/gamecube-fixes.md](docs/gamecube-fixes.md): everything that had to change to run in 24 MB, and why.
+- [docs/gamecube-fixes.md](docs/gamecube-fixes.md): everything that had to change to run in 24 MB, and why, and what took it from 28 to 55-60 frames a second on hardware.
 - [docs/gamecube-memory.md](docs/gamecube-memory.md): what fills memory in a run, the difficulty-7 fragmentation hunt, and what bigger GameCube games do differently.
 
 ## Credits
