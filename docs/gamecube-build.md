@@ -41,9 +41,9 @@ Both repos sit side by side:
     # 3. the scripts, from the PC's
     python native/patch_from_pc.py
 
-    # 4. the disc image -> proj/Packaged/GameCube/Sonic2Special3DGC.iso
+    # 4. the disc image -> proj/Packaged/GameCube/SonicPipeDream.iso
     #    (PowerShell, devkitPPC on PATH, the octave-libogc repo's ROOT Octave.exe, run from that repo)
-    Octave.exe -project <this repo>/proj/Sonic2Special3DGC.octp -headless -build GameCube
+    Octave.exe -project <this repo>/proj/SonicPipeDream.octp -headless -build GameCube
 
 Needs the octave-libogc fork at or after "GameCube: a Stream sound leaves its compressed audio
 on the disc": without it the music does not fit in memory.

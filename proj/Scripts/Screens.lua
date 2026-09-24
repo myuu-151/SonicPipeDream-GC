@@ -63,7 +63,7 @@ local function BuildAssets()
                     "SW_Explosion", "SW_ExitStage",
                     "SM_Shadow", "SM_Sonic_Idle_00", "SM_Emerald",
                     "T_UI_Emblem", "T_UI_EmblemRed", "T_UI_Flag", "T_UI_FlagLeft", "T_UI_SonicRings",
-                    "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total", "T_UI_Lives" }
+                    "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total", "T_UI_Time", "T_UI_Lives" }
     for i = 0, 11 do names[#names + 1] = string.format("SM_Ring_%02d", i) end
     for i = 0, 2 do names[#names + 1] = "T_Explosion_" .. i end
     for i = 0, 15 do
@@ -210,12 +210,14 @@ end
 function Sky:GoToMarathon(run)
     GameOptions.run = run or "marathon"
     TheMenu:Close()
-    TheLoading:Show((GameOptions.run == "timeAttack") and "time_attack" or "marathon")
     local seed = 12345
     if (os ~= nil and os.time ~= nil) then seed = math.floor(os.time()) * 1000 end
     if (System.GetClockMs ~= nil) then seed = seed + System.GetClockMs() end
     seed = math.floor(seed % 2147483647)
-    self.going = { stage = "Marathon", step = 0, clock = 0.0, seed = seed, palette = MarathonFirstPalette(seed) }
+    local palette = MarathonFirstPalette(seed)
+    -- the loading screen shows the emerald of the first zone's colours (its item: SpawnItem)
+    TheLoading:Show((GameOptions.run == "timeAttack") and "time_attack" or "marathon", nil, palette)
+    self.going = { stage = "Marathon", step = 0, clock = 0.0, seed = seed, palette = palette }
 end
 
 -- The stage started, the loading screen still up over it.
@@ -299,7 +301,7 @@ function Sky:TickGoing(deltaTime)
                 Want("SM_Piece_" .. piece .. "_P" .. g.palette)
                 Want("SM_Piece_" .. piece .. "_Gloss_P" .. g.palette)
             end
-            Want("SM_Emerald_1")
+            Want("SM_Emerald_" .. g.palette)              -- the first zone's item: its colours' emerald
             for i = 0, ARCH_RINGS - 1 do Want("SM_RingRainbow_" .. i) end
         else
             local data = _G["StageData" .. g.stage]
@@ -654,6 +656,7 @@ function Sky:TestMarathon(deltaTime)
         GameOptions.marathon.start, GameOptions.timeAttack.start = GcTest.start, GcTest.start
     end
     if (GcTest.lives ~= nil) then GameOptions.timeAttack.lives = GcTest.lives end
+    if (GcTest.rounds ~= nil) then GameOptions.marathon.rounds, GameOptions.timeAttack.rounds = GcTest.rounds, GcTest.rounds end
     -- GcTest.census = seconds: every asset's memory and the heap, logged that often (Dolphin log build)
     if (GcTest.census ~= nil and System.MemoryCensus ~= nil) then
         self.censusIn = (self.censusIn or GcTest.census) - deltaTime
