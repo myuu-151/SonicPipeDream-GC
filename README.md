@@ -50,6 +50,11 @@ freezes about 25 seconds in; the details are in the build notes.
 - [docs/gamecube-build.md](docs/gamecube-build.md): how the port is made from the PC repo, and how to build it.
 - [docs/gamecube-fixes.md](docs/gamecube-fixes.md): everything that had to change to run in 24 MB, and why.
 
+## Credits
+
+- **Music**: megabaz
+- **Sonic model**: murissargb
+
 Built on the [Octave engine](https://github.com/myuu-151/Octave-libogc).
 
 *A fan game, not affiliated with SEGA. Sonic the Hedgehog is a trademark of SEGA.*
