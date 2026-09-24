@@ -55,7 +55,7 @@ local MARATHON_BREATH = 40          -- MarathonGen.BREATH here: its work between
 -- stage's own assets, so that first time is no slower to leave the loading screen.
 local function BuildAssets()
     local names = { "SM_Ring", "SM_Bomb", "SM_PlayerBall", "SM_FxQuad", "SM_FxQuadBoom", "M_Explosion",
-                    "SM_FxQuadRazor", "SM_FxQuadPuff", "SM_FxTrace", "SW_SpinRev", "SW_SpinRelease",
+                    "SM_FxQuadRazor", "SM_FxQuadPuff", "SM_FxTrace", "SW_SpinRev", "SW_SpinRelease", "SW_Hurt",
                     -- every effect a stage plays, loaded at boot with the rest: the checkpoint and the
                     -- emerald, the biggest, were loaded the first time each played and in a marathon's
                     -- cut-up heap that could fail -- and then they were silent all run
