@@ -48,7 +48,9 @@ MUSIC = [("ss_intro.wav", "SW_SpecialStage_Intro", 0x51C0FFEE00300001),
          ("stage4_loop.wav", "SW_SpecialStage_Stage4Loop", 0x51C0FFEE00300009),
          ("stage5full.wav", "SW_SpecialStage_Stage5", 0x51C0FFEE0030000A),         # the stage 5 track, whole (stage 6)
          ("stage7_intro.wav", "SW_SpecialStage_Stage7Intro", 0x51C0FFEE0030000B),
-         ("stage7_loop.wav", "SW_SpecialStage_Stage7Loop", 0x51C0FFEE0030000C),]
+         ("stage7_loop.wav", "SW_SpecialStage_Stage7Loop", 0x51C0FFEE0030000C),
+         ("menuintro.wav", "SW_SpecialStage_MenuIntro", 0x51C0FFEE0030000D),        # the menus': once,
+         ("menuloop.wav", "SW_SpecialStage_MenuLoop", 0x51C0FFEE0030000E)]          # then this
 EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_LoseRings", 0x51C0FFEE00300011),
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),

@@ -723,6 +723,7 @@ function Sky:Tick(deltaTime)
     -- were cutting up the big holes the stage's pieces and the new stars need.
     local loading = (self.going ~= nil and (self.going.step < 3 or self.going.step >= 25)) or self.returning ~= nil
     if (not loading) then pcTick(self, deltaTime) end
+    if (loading and MenuMusic ~= nil) then MenuMusic.Tick(deltaTime) end   -- (pcTick ticks it otherwise)
     if (self.going ~= nil) then self:TickGoing(deltaTime) end
     if (self.returning ~= nil) then self:TickReturning(deltaTime) end
     self:TestExit(deltaTime)
