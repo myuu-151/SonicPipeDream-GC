@@ -12,8 +12,6 @@
 --     hold = seconds    in a marathon, change its colours that often, as a zone's hold does
 --     holdTo = n        ...always to palette n (else the next one round)
 --     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)
---     marathon = true   on the title menu, choose MARATHON by itself (after `wait`)
---     hold = seconds    in a marathon, change its colours that often, as a zone's hold does
---     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)
+--     spin = seconds    a spin dash that long into a stage, and every 8 s after (S2_TEST_SPIN)
 
 GcTest = {}

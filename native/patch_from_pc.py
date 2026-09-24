@@ -21,6 +21,7 @@ CHANGES = [
     # ball is a plain lit sphere, whose roll was never visible anyway.
     ("""        self.player:SetWorldRotationQuat(FacingQuat(Turn(fwdHere), Turn(upHere)))""",
      """        self.player:SetWorldRotationQuat(FacingQuat(fwdHere, upHere))      -- GAMECUBE: no roll (painted gloss)"""),
+    ("local BALL_ROLLS = true ", "local BALL_ROLLS = false"),    # (the same: the curled ball on the pipe)
     # -- the header says which script this is
     ("""-- SpecialStage.lua
 -- A basic playable special stage.
@@ -135,6 +136,11 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     ("""    self.autoplay = (os ~= nil and os.getenv ~= nil and os.getenv("S2_AUTOPLAY") ~= nil)
 """, """    self.autoplay = (os ~= nil and os.getenv ~= nil and os.getenv("S2_AUTOPLAY") ~= nil)
                     or (GcTest ~= nil and GcTest.autoplay == true)
+"""),
+    # -- the spin dash's test: GcTest.spin here (no environment)
+    ("""    self.testSpin = (os ~= nil and os.getenv ~= nil and tonumber(os.getenv("S2_TEST_SPIN") or "")) or nil
+""", """    self.testSpin = (os ~= nil and os.getenv ~= nil and tonumber(os.getenv("S2_TEST_SPIN") or "")) or nil
+    if (self.testSpin == nil and GcTest ~= nil) then self.testSpin = GcTest.spin end
 """),
     # -- THE MARATHON'S COLOURS. On the PC a change of colours swaps every piece to another palette's
     # meshes (SM_Piece_Drop_P3 for _P5), all seven palettes loaded as they come. Here two sets do not

@@ -60,7 +60,9 @@ EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_Lo
            # the menus: the highlight moving, a menu going on to the next (and pausing), a stage chosen,
            # and B, back out of a menu
            ("MenuButton.ogg", "SW_MenuMove", 0x51C0FFEE0030001C), ("Select.ogg", "SW_MenuSelect", 0x51C0FFEE0030001E),
-           ("SpecialWarp.ogg", "SW_MenuWarp", 0x51C0FFEE0030001D), ("back.wav", "SW_MenuBack", 0x51C0FFEE0030001F)]
+           ("SpecialWarp.ogg", "SW_MenuWarp", 0x51C0FFEE0030001D), ("back.wav", "SW_MenuBack", 0x51C0FFEE0030001F),
+           ("Release.ogg", "SW_SpinRelease", 0x51C0FFEE00300020),      # a spin dash let go
+           ("Charge.ogg", "SW_SpinRev", 0x51C0FFEE00300021)]           # ...and revved, a press of A
 NORMALISE = {"SW_GetEmerald": 0.97}         # as the PC does: that file is quiet
 
 

@@ -54,6 +54,7 @@ local MARATHON_BREATH = 40          -- MarathonGen.BREATH here: its work between
 -- stage's own assets, so that first time is no slower to leave the loading screen.
 local function BuildAssets()
     local names = { "SM_Ring", "SM_Bomb", "SM_PlayerBall", "SM_FxQuad", "SM_FxQuadBoom", "M_Explosion",
+                    "SM_FxQuadRazor", "SM_FxQuadPuff", "SM_FxTube", "SM_FxTubeCap", "SW_SpinRev", "SW_SpinRelease",
                     "SM_Shadow", "SM_Sonic_Idle_00", "SM_Emerald",
                     "T_UI_Emblem", "T_UI_EmblemRed", "T_UI_Flag", "T_UI_FlagLeft", "T_UI_SonicRings",
                     "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total", "T_UI_Lives" }
@@ -392,6 +393,8 @@ function Sky:TeardownStage()
             for _, node in ipairs(nodes) do Kill(node) end
         end
         for _, fx in ipairs(s.fx or {}) do Kill(fx.node) end
+        for _, node in ipairs(s.tubeNodes or {}) do Kill(node) end      -- the spin dash's traced tube
+        Kill(s.tubeCap)
         for _, node in ipairs({ s.player, s.playerShadow, s.uiNode, s.debugNode }) do Kill(node) end
         local world = self:GetWorld()
         Kill(world:FindNode("SpecialStageMusic"))
