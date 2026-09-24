@@ -30,6 +30,7 @@
 -- Tick. The PC's Sky:StartSpecialStage is used as it is.
 
 Script.Require("PadInput")
+Script.Require("GameOptions")   -- the marathon's and the time attack's settings; which one is next
 Script.Require("GcTest")        -- switches for testing in Dolphin; all off unless set there
 Script.Require("SaveInfo")      -- the save's name and icon on the memory card screen
 
@@ -146,14 +147,16 @@ function Sky:SpawnMenus(selectAt)
             -- the memory card prompt, over the menu; the menu keeps still until it closes
             TheMenu.busy = true
             TheSavePrompt:Open(key)
-        elseif (key == "marathon") then
-            -- its setup first (OptionsPrompt.lua); START there begins the run
+        elseif (key == "marathon" or key == "time_attack") then
+            -- its setup first (OptionsPrompt.lua); START there begins the run. A time attack is
+            -- the same run against the clock (SpecialStage.lua: data.timeAttack).
+            local run = (key == "time_attack") and "timeAttack" or "marathon"
             TheMenu.busy = true
             TheOptions.onStart = function()
                 TheOptions.onStart = nil
-                self:GoToMarathon()
+                self:GoToMarathon(run)
             end
-            TheOptions:Open("marathon")
+            TheOptions:Open(run)
         end
     end
     TheSavePrompt.onClose = function() TheMenu.busy = false end
@@ -198,9 +201,10 @@ local function MarathonFirstPalette(seed)
     return math.floor((rng // 65536) % 7) + 1
 end
 
-function Sky:GoToMarathon()
+function Sky:GoToMarathon(run)
+    GameOptions.run = run or "marathon"
     TheMenu:Close()
-    TheLoading:Show("marathon")
+    TheLoading:Show((GameOptions.run == "timeAttack") and "time_attack" or "marathon")
     local seed = 12345
     if (os ~= nil and os.time ~= nil) then seed = math.floor(os.time()) * 1000 end
     if (System.GetClockMs ~= nil) then seed = seed + System.GetClockMs() end
@@ -645,7 +649,7 @@ function Sky:TestMarathon(deltaTime)
         self.marathonIn = (self.marathonIn or GcTest.wait or 3.0) - deltaTime
         if (self.marathonIn <= 0.0) then
             self.marathonIn = nil
-            self:GoToMarathon()
+            self:GoToMarathon(GcTest.timeAttack and "timeAttack" or "marathon")
         end
     end
     -- GcTest.thenMarathon: after `pick`'s one stage, back on the stage select, a marathon
@@ -655,7 +659,7 @@ function Sky:TestMarathon(deltaTime)
         if (self.marathonIn <= 0.0) then
             self.marathonIn = nil
             TheStageSelect:Close()
-            self:GoToMarathon()
+            self:GoToMarathon(GcTest.timeAttack and "timeAttack" or "marathon")
         end
     end
     local s = TheSpecialStage

@@ -2,7 +2,7 @@
 --
 -- Switches for testing a build in Dolphin without touching the pad (keys sent to Dolphin can land
 -- in whatever window has the focus). The PC's S2_* environment variables cannot reach a console,
--- so these stand in for them. ALL OFF in anything shipped: GcTest = { marathon = true, exit = 10, free = true, wait = 1 }.
+-- so these stand in for them. ALL OFF in anything shipped: GcTest = { marathon = true, timeAttack = true, autoplay = true, wait = 1 }.
 --
 --     pick = n          on the stage select, choose stage n by itself (0: 1 to 7, then round again)
 --     exit = seconds    leave a stage that long after it starts, as EXIT from the pause menu does
@@ -10,6 +10,7 @@
 --     wait = seconds    how long the stage select shows before `pick` chooses (default 3)
 --     marathon = true   on the title menu, choose MARATHON by itself (after `wait`)
 --     thenMarathon = true   after `pick`'s one stage, back on the stage select, a MARATHON
+--     timeAttack = true     with `marathon`: a TIME ATTACK instead
 --     hold = seconds    in a marathon, change its colours that often, as a zone's hold does
 --     holdTo = n        ...always to palette n (else the next one round)
 --     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)
