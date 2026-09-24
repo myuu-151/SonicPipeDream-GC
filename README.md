@@ -52,8 +52,11 @@ Dolphin or on a GameCube that can load disc images. On a real GameCube it is pla
 card (the image on the card, loaded through Swiss); an SD adapter that supports DMA reads it
 fastest.
 
-**In Dolphin, use DSP LLE** (game settings: `[Core] DSPHLE = False`). With DSP HLE the game
-freezes about 25 seconds in; the details are in the build notes.
+**In Dolphin**, set two things in the game's properties:
+- **Untick Emulate Disc Speed** (`[Core] FastDiscSpeed = True`). The game streams its sky and
+  music from the disc all the time, and at emulated drive speed that slows it down.
+- **Use DSP LLE** (`[Core] DSPHLE = False`). With DSP HLE the game freezes about 25 seconds in;
+  the details are in the build notes.
 
 ## More
 
