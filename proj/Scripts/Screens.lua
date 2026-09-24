@@ -198,6 +198,17 @@ function Sky:StartGoing(g)
     if (g.stage == "Marathon") then
         TheSpecialStage.onExit = function() self:BackToSelect(nil) end
         TheSpecialStage.onFinished = function() self:BackToSelect(nil) end
+        -- The recolour's staging buffers, taken NOW, behind the loading screen, and kept for the run
+        -- (StaticMesh:StageColorsFrom): taken mid-game, at a change of colours, they made the
+        -- picture flash with garbage for as long as they were held.
+        -- (every piece, not just the first zone's: a later zone may bring one in)
+        for _, piece in ipairs(MARATHON_PIECES) do
+            TheSpecialStage:PieceMesh("SM_Piece_" .. piece .. "_P", g.palette)
+            TheSpecialStage:PieceMesh("SM_Piece_" .. piece .. "_Gloss_P", g.palette)
+        end
+        for full, mesh in pairs(TheSpecialStage.pieceMeshes or {}) do
+            if (mesh and mesh.StageColorsFrom ~= nil) then mesh:StageColorsFrom(full, 0, 0) end
+        end
     else
         TheSpecialStage.onExit = function() self:BackToSelect(nil) end
         TheSpecialStage.onFinished = function(won) self:BackToSelect(won) end
@@ -215,7 +226,7 @@ function Sky:TickGoing(deltaTime)
         local data
         if (g.stage == "Marathon") then
             -- not built yet: its sky is known from the seed (see GoToMarathon)
-            data = { sky = ({ 0, 4, 6, 2, 5, 3, 1 })[g.palette] }
+            data = { sky = ({ 0, 4, 6, 3, 5, 2, 1 })[g.palette] }     -- stage_palettes.py SKY
         else
             data = LoadStageData(g.stage)
             if (data == nil) then
@@ -424,12 +435,17 @@ end
 local STAR_ASK_AGAIN = 1.5          -- seconds
 function Sky:HoldStars(deltaTime)
     local w = self.starSwap
-    if (w ~= nil and w.switched) then
-        -- a marathon's change of sky, past its switch: the last frame read in, then the twinkle
-        if (w.k <= #w.order) then self:StarSwapPiece(w) end
-        if (w.k > #w.order) then
-            self.starSwap, self.starsHeld = nil, true
-            self.frame = -1
+    if (w ~= nil) then
+        -- A marathon's change of sky under way: the frames are being written, so the twinkle
+        -- stays still (starsHeld false) until the last is in. (Left to the code below, it found
+        -- all eight "loaded", held them again at once, and went on showing frames half written
+        -- -- the sky dome's texture torn mid-read flashed over the whole picture.)
+        if (w.switched) then
+            if (w.k <= #w.order) then self:StarSwapPiece(w) end
+            if (w.k > #w.order) then
+                self.starSwap, self.starsHeld = nil, true
+                self.frame = -1
+            end
         end
         return
     end
