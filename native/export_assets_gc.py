@@ -239,7 +239,7 @@ def hud():
     pc_font.ATLAS_W, pc_font.ATLAS_H = 512, 256
     pc_font.OUTLINE, pc_font.SHADOW = 2, (3, 3)
     pc_font.PAD = pc_font.OUTLINE + 2
-    pc_font.ONLY = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!"     # numbers, COOL !, TOO BAD !, the banners
+    pc_font.ONLY = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!-"    # numbers, COOL !, TOO BAD !, the banners, IN-STAGE
     pc_font.main()
     os.remove(pc_font.LOOK)
 

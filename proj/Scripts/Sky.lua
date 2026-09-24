@@ -296,6 +296,9 @@ function Sky:ShowMenu()
     local prompt = world:SpawnNode("Canvas")
     prompt:SetName("SavePrompt")
     prompt:SetScript("SavePrompt")
+    local options = world:SpawnNode("Canvas")
+    options:SetName("OptionsPrompt")
+    options:SetScript("OptionsPrompt")
     local loading = world:SpawnNode("Canvas")
     loading:SetName("Loading")
     loading:SetScript("Loading")
@@ -327,6 +330,11 @@ function Sky:ShowMenu()
             if (key == "main_game" and TheStageSelect ~= nil) then
                 TheMenu:Close()
                 TheStageSelect:Open()
+            elseif (key == "options" and TheOptions ~= nil) then
+                -- the options, over the menu; the menu keeps still until they close
+                TheMenu.busy = true
+                TheOptions.onClose = function() TheMenu.busy = false end
+                TheOptions:Open()
             elseif ((key == "save" or key == "load") and TheSavePrompt ~= nil) then
                 -- the Saves folder, over the menu; the menu keeps still until it closes
                 TheMenu.busy = true

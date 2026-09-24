@@ -304,7 +304,9 @@ OTHERS = {
 """, """if (MarathonKit == nil) then Script.Run("MarathonKit") end          -- GAMECUBE: freed after a run
 """)],
     "MarathonKit.lua": [],
-    "MenuMusic.lua": [],            # the menus' music: Screens.lua ticks it under its loading screen too
+    "MenuMusic.lua": [],
+    "GameOptions.lua": [],          # the settings, kept with the save on the card
+    "OptionsPrompt.lua": [],        # OPTIONS on the title menu            # the menus' music: Screens.lua ticks it under its loading screen too
     # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
     # clear of the edges.
     "SpecialStageUI.lua": [("local SAFE_MARGIN = 0.0\n", "local SAFE_MARGIN = 0.04\n")],

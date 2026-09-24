@@ -117,6 +117,9 @@ function Sky:SpawnMenus(selectAt)
     self.saveNode = world:SpawnNode("Canvas")
     self.saveNode:SetName("SavePrompt")
     self.saveNode:SetScript("SavePrompt")
+    self.optionsNode = world:SpawnNode("Canvas")
+    self.optionsNode:SetName("OptionsPrompt")
+    self.optionsNode:SetScript("OptionsPrompt")
 
     -- TheMenu, TheStageSelect and TheSavePrompt are set by each script's Create, which has run.
     TheStageSelect:Close()
@@ -129,6 +132,9 @@ function Sky:SpawnMenus(selectAt)
         if (key == "main_game") then
             TheMenu:Close()
             TheStageSelect:Open()
+        elseif (key == "options") then
+            TheMenu.busy = true
+            TheOptions:Open()
         elseif (key == "save" or key == "load") then
             -- the memory card prompt, over the menu; the menu keeps still until it closes
             TheMenu.busy = true
@@ -138,6 +144,7 @@ function Sky:SpawnMenus(selectAt)
         end
     end
     TheSavePrompt.onClose = function() TheMenu.busy = false end
+    TheOptions.onClose = function() TheMenu.busy = false end
     if (selectAt ~= nil) then
         TheMenu:Close()
         TheStageSelect.index = selectAt
@@ -153,8 +160,9 @@ function Sky:DropMenus()
     if (self.menuNode ~= nil) then self.menuNode:Destruct() end
     if (self.selectNode ~= nil) then self.selectNode:Destruct() end
     if (self.saveNode ~= nil) then self.saveNode:Destruct() end
-    self.menuNode, self.selectNode, self.saveNode = nil, nil, nil
-    TheMenu, TheStageSelect, TheSavePrompt = nil, nil, nil
+    if (self.optionsNode ~= nil) then self.optionsNode:Destruct() end
+    self.menuNode, self.selectNode, self.saveNode, self.optionsNode = nil, nil, nil, nil
+    TheMenu, TheStageSelect, TheSavePrompt, TheOptions = nil, nil, nil, nil
     Sweep()
 end
 
