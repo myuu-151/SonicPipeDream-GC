@@ -103,10 +103,16 @@ function Sky:ShowMenu()
     -- time; their blocks are kept for them and never given back to the heap (System.PinBlocks), or
     -- a busy marathon cut the heap up until, with 1.7 MB free, no frame could find 64 KB.
     if (self.kept == nil and System.PinBlocks ~= nil) then System.PinBlocks(SKY_FRAME_BYTES) end
+    -- The first time, at boot, this is most of the loading: the engine's loading screen is kept up
+    -- for it, its bar carrying on (Renderer.ShowLoadingProgress). Without it the screen sat on the
+    -- engine's last frame of it, the bar one step in, until the menu appeared.
+    local boot = (self.kept == nil and Renderer.ShowLoadingProgress ~= nil)
+    if (boot) then Renderer.ShowLoadingProgress(true) end
     self.kept = {}
     for _, name in ipairs(BuildAssets()) do self.kept[#self.kept + 1] = LoadAsset(name) end
     self:SpawnLoading()
     self:SpawnMenus(nil)
+    if (boot) then Renderer.ShowLoadingProgress(false) end
 end
 
 function Sky:SpawnLoading()
