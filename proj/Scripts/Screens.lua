@@ -685,6 +685,15 @@ function Sky:TestFree()
                                             self.tickAvg or 0.0, self.genAvg or 0.0, math.floor(s.frame or 0),
                                             math.floor(collectgarbage("count")), s.genError or ""))
         self.freeText:SetPosition(28.0, 340.0)
+    elseif (s ~= nil and s.sounds ~= nil) then
+        -- a stage: which of its sounds have been asked for, and any that would not load
+        local got, failed = {}, {}
+        for name, snd in pairs(s.sounds) do
+            if (snd) then got[#got + 1] = name else failed[#failed + 1] = name end
+        end
+        self.freeText:SetText(string.format("free %d KB  sounds %s\nFAILED %s", free, table.concat(got, " "),
+                                            table.concat(failed, " ")))
+        self.freeText:SetPosition(28.0, 340.0)
     else
         self.freeText:SetText(string.format("free %d KB", free))
         self.freeText:SetPosition(470.0, 22.0)
