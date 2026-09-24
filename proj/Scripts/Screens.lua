@@ -56,7 +56,7 @@ local function BuildAssets()
     local names = { "SM_Ring", "SM_Bomb", "SM_PlayerBall", "SM_FxQuad", "SM_FxQuadBoom", "M_Explosion",
                     "SM_Shadow", "SM_Sonic_Idle_00", "SM_Emerald",
                     "T_UI_Emblem", "T_UI_EmblemRed", "T_UI_Flag", "T_UI_FlagLeft", "T_UI_SonicRings",
-                    "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total" }
+                    "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total", "T_UI_Lives" }
     for i = 0, 11 do names[#names + 1] = string.format("SM_Ring_%02d", i) end
     for i = 0, 2 do names[#names + 1] = "T_Explosion_" .. i end
     for i = 0, 15 do
@@ -134,13 +134,20 @@ function Sky:SpawnMenus(selectAt)
             TheStageSelect:Open()
         elseif (key == "options") then
             TheMenu.busy = true
+            TheOptions.onStart = nil
             TheOptions:Open()
         elseif (key == "save" or key == "load") then
             -- the memory card prompt, over the menu; the menu keeps still until it closes
             TheMenu.busy = true
             TheSavePrompt:Open(key)
         elseif (key == "marathon") then
-            self:GoToMarathon()
+            -- its setup first (OptionsPrompt.lua); START there begins the run
+            TheMenu.busy = true
+            TheOptions.onStart = function()
+                TheOptions.onStart = nil
+                self:GoToMarathon()
+            end
+            TheOptions:Open("marathon")
         end
     end
     TheSavePrompt.onClose = function() TheMenu.busy = false end

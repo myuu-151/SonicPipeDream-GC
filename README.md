@@ -54,6 +54,7 @@ freezes about 25 seconds in; the details are in the build notes.
 
 - **Music**: megabaz
 - **Sonic model**: murissargb
+- **Lives icon**: eris1521987
 
 Built on the [Octave engine](https://github.com/myuu-151/Octave-libogc).
 
