@@ -102,7 +102,9 @@ function Sky:LoadSky(sky)
     -- around.
     self.window = {}
     self.medleyShown = nil          -- none of its diamond frames yet: the last sky's is not shown again
-    if (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
+    if (self.starSwap ~= nil and self.starSwap.switched and self.starSwap.sky == sky) then
+        -- a marathon's hold has read this sky's stars in already (Screens.lua's Sky:BeginStarSwap)
+    elseif (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
         -- THE SAME EIGHT TEXTURES, REFILLED: every sky's star frames are one size and format, so
         -- the new sky's texels go into the buffers already here (Texture:ReloadFrom, one frame a
         -- tick, Screens.lua's Sky:HoldStars). Freeing 4 MB of 512 KB frames and allocating 4 MB

@@ -18,6 +18,11 @@
 -- way: the stage's pipe and data are let go and the menus built again, at the stage select,
 -- with that stage under the cursor.
 --
+-- MARATHON goes the same way, with its first zone BUILT behind the loading screen (MarathonGen.lua,
+-- a slice a frame, after the pipe has arrived) and every piece of track loaded, not just the
+-- first zone's: the zones after it are made as it is played. Leaving it goes back to the title
+-- menu, and the generator and its kit are let go of.
+--
 -- The sky is not changed on the way back: the PC leaves the last stage's sky up behind the
 -- menus too, and here it saves loading a sky's 4 MB of stars twice.
 --
@@ -41,6 +46,9 @@ if (Renderer.SetCompactUnlitMeshes ~= nil) then Renderer.SetCompactUnlitMeshes(t
 local STAGES = 7
 local WAIT_AT_MOST = 30.0           -- seconds: a stage starts even if something never arrives,
                                     -- rather than leaving the loading screen up for ever
+local MARATHON_BUILD_MS = 30        -- a marathon's first zone: milliseconds of building a frame,
+                                    -- behind the loading screen (it keeps moving)
+local MARATHON_BREATH = 40          -- MarathonGen.BREATH here: its work between yields
 
 -- Everything SpecialStage:Build loads, the first time a stage is played. Asked for with the
 -- stage's own assets, so that first time is no slower to leave the loading screen.
@@ -125,6 +133,8 @@ function Sky:SpawnMenus(selectAt)
             -- the memory card prompt, over the menu; the menu keeps still until it closes
             TheMenu.busy = true
             TheSavePrompt:Open(key)
+        elseif (key == "marathon") then
+            self:GoToMarathon()
         end
     end
     TheSavePrompt.onClose = function() TheMenu.busy = false end
@@ -156,6 +166,45 @@ function Sky:GoToStage(stage)
     self.going = { stage = stage, step = 0, clock = 0.0 }
 end
 
+-- The marathon's run: its seed now, and from the seed its first colours (as SpecialStage's
+-- JoinZone draws them: keep the two alike), so its sky and pipe can be loaded before the zone is
+-- built. Every run is new: the time of day and the milliseconds since the game started.
+local MARATHON_PIECES = { "Straight", "CornerLeft", "CornerRight", "Drop", "Rise" }
+local ARCH_RINGS = 9                -- the rainbow arch's rings, in every stage and the marathon
+
+local function MarathonFirstPalette(seed)
+    local rng = math.floor((seed * 1103515245 + 12345) % 2147483648)
+    return math.floor((rng // 65536) % 7) + 1
+end
+
+function Sky:GoToMarathon()
+    TheMenu:Close()
+    TheLoading:Show("marathon")
+    local seed = 12345
+    if (os ~= nil and os.time ~= nil) then seed = math.floor(os.time()) * 1000 end
+    if (System.GetClockMs ~= nil) then seed = seed + System.GetClockMs() end
+    seed = math.floor(seed % 2147483647)
+    self.going = { stage = "Marathon", step = 0, clock = 0.0, seed = seed, palette = MarathonFirstPalette(seed) }
+end
+
+-- The stage started, the loading screen still up over it.
+function Sky:StartGoing(g)
+    self:StartSpecialStage(g.stage)
+    -- Built NOW, not on its own first tick next frame: Build spawns the HUD, and the
+    -- loading screen has to be moved back over it in the same frame, or the HUD shows
+    -- through it for a frame.
+    if (not TheSpecialStage.built) then TheSpecialStage:Build() end
+    self.loadingNode:Attach(self:GetWorld():GetRootNode(), false)
+    if (g.stage == "Marathon") then
+        TheSpecialStage.onExit = function() self:BackToSelect(nil) end
+        TheSpecialStage.onFinished = function() self:BackToSelect(nil) end
+    else
+        TheSpecialStage.onExit = function() self:BackToSelect(nil) end
+        TheSpecialStage.onFinished = function(won) self:BackToSelect(won) end
+    end
+    g.step = 3
+end
+
 function Sky:TickGoing(deltaTime)
     local g = self.going
     g.clock = g.clock + deltaTime
@@ -163,10 +212,16 @@ function Sky:TickGoing(deltaTime)
         g.step = 1                              -- the loading screen is drawn this frame
     elseif (g.step == 1) then
         self:DropMenus()
-        local data = LoadStageData(g.stage)
-        if (data == nil) then
-            Log.Error("Screens: no StageData" .. g.stage)
-            g.stage, data = 1, LoadStageData(1)
+        local data
+        if (g.stage == "Marathon") then
+            -- not built yet: its sky is known from the seed (see GoToMarathon)
+            data = { sky = ({ 0, 4, 6, 2, 5, 3, 1 })[g.palette] }
+        else
+            data = LoadStageData(g.stage)
+            if (data == nil) then
+                Log.Error("Screens: no StageData" .. g.stage)
+                g.stage, data = 1, LoadStageData(1)
+            end
         end
         -- The stage's sky, changed NOW and before anything of the stage's is asked for: the last
         -- sky's stars go (4 MB, in eight 512 KB frames) and the new ones are first in the queue.
@@ -189,7 +244,6 @@ function Sky:TickGoing(deltaTime)
         -- biggest pieces first. (Nothing else is loading meanwhile: Sky:Tick holds the sky still,
         -- and its streaming with it, while the loading screen is up.)
         if (not self:StarsReady() and g.clock < WAIT_AT_MOST) then return end
-        local data = _G["StageData" .. g.stage]
         local names, seen = {}, {}
         local function Want(name)
             if (not seen[name]) then
@@ -197,12 +251,23 @@ function Sky:TickGoing(deltaTime)
                 names[#names + 1] = name
             end
         end
-        for _, piece in ipairs(data.pieces) do
-            Want(piece.mesh .. data.palette)
-            Want(piece.gloss .. data.palette)
+        if (g.stage == "Marathon") then
+            -- every piece: the zones to come are not made yet, and could use any of them
+            for _, piece in ipairs(MARATHON_PIECES) do
+                Want("SM_Piece_" .. piece .. "_P" .. g.palette)
+                Want("SM_Piece_" .. piece .. "_Gloss_P" .. g.palette)
+            end
+            Want("SM_Emerald_1")
+            for i = 0, ARCH_RINGS - 1 do Want("SM_RingRainbow_" .. i) end
+        else
+            local data = _G["StageData" .. g.stage]
+            for _, piece in ipairs(data.pieces) do
+                Want(piece.mesh .. data.palette)
+                Want(piece.gloss .. data.palette)
+            end
+            Want("SM_Emerald_" .. g.stage)
+            for i = 0, data.arch.rings - 1 do Want("SM_RingRainbow_" .. i) end
         end
-        Want("SM_Emerald_" .. g.stage)
-        for i = 0, data.arch.rings - 1 do Want("SM_RingRainbow_" .. i) end
         if (TheSpecialStage == nil or not TheSpecialStage.built) then
             for _, name in ipairs(BuildAssets()) do Want(name) end
         end
@@ -227,16 +292,40 @@ function Sky:TickGoing(deltaTime)
         end
         if (ready or g.clock > WAIT_AT_MOST) then
             if (not ready) then Log.Warning("Screens: a stage asset never arrived; starting anyway") end
-            self:StartSpecialStage(g.stage)
-            -- Built NOW, not on its own first tick next frame: Build spawns the HUD, and the
-            -- loading screen has to be moved back over it in the same frame, or the HUD shows
-            -- through it for a frame.
-            if (not TheSpecialStage.built) then TheSpecialStage:Build() end
-            self.loadingNode:Attach(self:GetWorld():GetRootNode(), false)
-            TheSpecialStage.onExit = function() self:BackToSelect(nil) end
-            TheSpecialStage.onFinished = function(won) self:BackToSelect(won) end
-            g.step = 3
+            if (g.stage == "Marathon") then
+                g.step = 25                     -- its first zone, built now the pipe is in
+            else
+                self:StartGoing(g)
+            end
         end
+    elseif (g.step == 25) then
+        -- The generator and its kit (read in this tick: the loading screen stands still for it),
+        -- then the first zone, a slice a frame.
+        if (MarathonGen == nil) then Script.Run("MarathonGen") end
+        -- Yielding ten times as often as on the PC: a slice there is a few milliseconds' work, and
+        -- here it took forty. And the collector kept close behind: a zone's building makes some
+        -- 10 MB of short-lived tables, and left to Lua's usual pace that garbage filled the heap
+        -- until the engine's own allocations failed. (Lua 5.3 has no generational mode.)
+        MarathonGen.BREATH = MARATHON_BREATH
+        collectgarbage("setpause", 110)
+        collectgarbage("setstepmul", 400)
+        local seed = g.seed
+        g.gen = coroutine.create(function() return MarathonGen.BuildZone(seed, 1) end)
+        g.genClock, g.step = 0.0, 26
+    elseif (g.step == 26) then
+        g.genClock = g.genClock + deltaTime
+        local t0 = System.GetClockMs and System.GetClockMs() or nil
+        repeat
+            local ok, zone = coroutine.resume(g.gen)
+            if (not ok or coroutine.status(g.gen) == "dead") then
+                if (not ok) then Log.Error("MarathonGen: " .. tostring(zone)) end
+                self.zone1Seconds = g.genClock
+                MarathonFirstZone, MarathonSeed = ok and zone or nil, g.seed
+                g.gen = nil
+                self:StartGoing(g)
+                return
+            end
+        until (t0 == nil or System.GetClockMs() - t0 >= MARATHON_BUILD_MS)
     elseif (g.step == 3) then
         -- up once the stage has built itself and drawn a frame
         -- ...and the new sky's first diamond frame is up (the sky runs again from here, and until
@@ -286,6 +375,9 @@ function Sky:TeardownStage()
     TheSpecialStage, TheSpecialStageUI, TheSpecialStageMusic = nil, nil, nil
     self.startedSpecialStage = false                -- so StartSpecialStage builds it afresh
     for k = 1, STAGES do _G["StageData" .. k] = nil end
+    MarathonGen, MarathonKit, MarathonFirstZone, MarathonSeed = nil, nil, nil, nil
+    collectgarbage("setpause", 200)                 -- Lua's own pace again (see TickGoing, step 25)
+    collectgarbage("setstepmul", 200)
     Sweep()
 end
 
@@ -301,7 +393,7 @@ function Sky:TickReturning(deltaTime)
         r.step = 1                              -- the loading screen is drawn this frame
     elseif (r.step == 1) then
         self:TeardownStage()
-        self:SpawnMenus(r.stage)
+        self:SpawnMenus((r.stage ~= "Marathon") and r.stage or nil)     -- a marathon: the title menu
         -- An emerald taken is remembered, on the memory card (StageSelect:SetWon); all seven
         -- light MARATHON up, which the stage select checks as it builds.
         if (r.won ~= nil) then TheStageSelect:SetWon(r.won, true) end
@@ -331,6 +423,16 @@ end
 -- frames and the last sky's. A frame still missing after a while is asked for again.
 local STAR_ASK_AGAIN = 1.5          -- seconds
 function Sky:HoldStars(deltaTime)
+    local w = self.starSwap
+    if (w ~= nil and w.switched) then
+        -- a marathon's change of sky, past its switch: the last frame read in, then the twinkle
+        if (w.k <= #w.order) then self:StarSwapPiece(w) end
+        if (w.k > #w.order) then
+            self.starSwap, self.starsHeld = nil, true
+            self.frame = -1
+        end
+        return
+    end
     if (self.starRefill ~= nil) then
         -- a change of sky: the eight textures refilled in place, one a tick (see Sky.lua's LoadSky)
         local r = self.starRefill
@@ -367,6 +469,74 @@ function Sky:HoldStars(deltaTime)
     if (self.starWait >= STAR_ASK_AGAIN) then self.starWait = 0.0 end
     self.starsHeld = all
     if (all) then self.frame = -1 end           -- the new stars go up on this tick
+end
+
+-- ------------------------------------------------------------------ a marathon's change of sky
+-- The hold between two zones changes the sky, and not behind a loading screen: Sonic runs on.
+-- The eight star frames (which carry the sky's colours too) are refilled in place, as a change of
+-- stage does, but A PIECE AT A TIME (Texture:ReloadPart) through the hold, not a frame a tick --
+-- 512 KB read in one go stops the game for a moment. The twinkle holds still meanwhile, on the
+-- frame it was showing, which is refilled last: all the others first, then at the switch (the pipe
+-- recoloured in the same frame, see SpecialStage:ApplyRecolour) a refilled one goes up, and the
+-- last one is read in behind it.
+local STAR_PIECE = 32 * 1024
+
+function Sky:BeginStarSwap(sky)
+    self.starSwap = nil
+    if (not self.starsHeld or sky == self.shownSky or self.starFrames[8] == nil
+            or self.starFrames[1].ReloadPart == nil) then
+        return                                  -- then the sky changes the ordinary way
+    end
+    local shown = (self.frame ~= nil and self.frame >= 0) and (self.frame + 1) or 1
+    local order = {}
+    for i = 1, 8 do
+        if (i ~= shown) then order[#order + 1] = i end
+    end
+    order[#order + 1] = shown
+    self.starSwap = { sky = sky, order = order, k = 1, at = 0, before = 7 }
+    self.starsHeld = false                      -- the twinkle holds still (Sky:StarFrame)
+end
+
+function Sky:StarSwapPiece(w)
+    local i = w.order[w.k]
+    local nextAt, total = self.starFrames[i]:ReloadPart(self.starName(w.sky, i), w.at, STAR_PIECE)
+    if (nextAt < 0) then
+        Log.Warning("Sky: star frame " .. i .. " not refilled")
+        w.k, w.at = w.k + 1, 0
+    elseif (nextAt >= total) then
+        w.k, w.at = w.k + 1, 0
+    else
+        w.at = nextAt
+    end
+end
+
+-- One piece; true once every frame but the one on show holds the new sky.
+function Sky:StepStarSwap()
+    local w = self.starSwap
+    if (w == nil or w.switched) then return true end
+    if (w.k <= w.before) then self:StarSwapPiece(w) end
+    return w.k > w.before
+end
+
+-- The switch: a refilled frame up at once. The stage sets `sky` after this; LoadSky then leaves
+-- the stars alone (patch_from_pc.py) and Sky:HoldStars reads the last frame in.
+function Sky:SwitchStars()
+    local w = self.starSwap
+    if (w == nil) then return end
+    w.switched = true
+    if (self.skyMat ~= nil) then self.skyMat:SetTexture(1, self.starFrames[w.order[1]]) end
+end
+
+-- Left part way (the run ended in the hold): the frames are some of each sky, so all eight are
+-- read again for the sky that is up, the ordinary way.
+function Sky:CancelStarSwap()
+    local w = self.starSwap
+    if (w == nil) then return end
+    self.starSwap = nil
+    self.starsHeld = true
+    local sky = w.switched and w.sky or self.shownSky
+    self.shownSky = -1                          -- so UpdateSky loads it: all eight refilled in place
+    self.sky = sky
 end
 
 -- All of the sky on show has arrived.
@@ -424,6 +594,29 @@ function Sky:TestPick(deltaTime)
     self:GoToStage(stage)
 end
 
+-- GcTest.marathon: the title menu chooses MARATHON by itself, after GcTest.wait seconds.
+-- GcTest.hold = seconds: in a marathon, a change of colours that often, as a zone's hold makes.
+function Sky:TestMarathon(deltaTime)
+    if (GcTest == nil) then return end
+    if (GcTest.marathon and self.going == nil and self.returning == nil and TheMenu ~= nil
+            and TheMenu.built and TheMenu.open and not TheMenu.busy) then
+        self.marathonIn = (self.marathonIn or GcTest.wait or 3.0) - deltaTime
+        if (self.marathonIn <= 0.0) then
+            self.marathonIn = nil
+            self:GoToMarathon()
+        end
+    end
+    local s = TheSpecialStage
+    if (GcTest.hold and s ~= nil and s.built and s.data ~= nil and s.data.marathon and self.going == nil
+            and s.holding == nil) then
+        self.holdIn = (self.holdIn or GcTest.hold) - deltaTime
+        if (self.holdIn <= 0.0) then
+            self.holdIn = nil
+            s.holding = { clock = 0.0, to = GcTest.holdTo or (s.palette % 7 + 1) }
+        end
+    end
+end
+
 -- GcTest.free: free memory in the corner of every screen, drawn over everything.
 function Sky:TestFree()
     if (GcTest == nil or not GcTest.free or System.GetFreeMemory == nil) then return end
@@ -440,7 +633,46 @@ function Sky:TestFree()
         self.freeText:SetColor(Vec(0.3, 0.9, 1.0, 1.0))
     end
     local free = System.GetFreeMemory() // 1024
-    self.freeText:SetText(string.format("free %d KB", free))
+    local s = TheSpecialStage
+    if (s ~= nil and s.data ~= nil and s.data.marathon) then
+        -- a marathon: the zones built, how long the next is taking, the first one's time, and the
+        -- milliseconds a frame its building and the whole stage's tick take (measured here)
+        if (s.timedBy ~= self and System.GetClockMs ~= nil) then
+            s.timedBy = self
+            local gen, tick = s.TickMarathonGen, s.Tick
+            s.TickMarathonGen = function(me)
+                local t = System.GetClockMs()
+                gen(me)
+                self.genMs = (self.genMs or 0) + System.GetClockMs() - t
+            end
+            s.Tick = function(me, dt)
+                local t = System.GetClockMs()
+                tick(me, dt)
+                self.tickMs = (self.tickMs or 0) + System.GetClockMs() - t
+                self.ticks = (self.ticks or 0) + 1
+            end
+        end
+        if ((self.ticks or 0) >= 30) then
+            self.genAvg, self.tickAvg = self.genMs / self.ticks, self.tickMs / self.ticks
+            self.genMs, self.tickMs, self.ticks = 0, 0, 0
+        end
+        if (s.gen ~= nil) then
+            self.genFor = (self.genFor or 0.0) + (self.lastTick or 0.0)
+        elseif (self.genFor ~= nil) then
+            self.lastGen, self.genFor = self.genFor, nil
+        end
+        self.freeText:SetText(string.format("free %d KB  zones %d  gen %.1f  last %.1f  z1 %.1f  pal %d%s\n"
+                                            .. "tick %.1f ms  gen %.1f ms  frame %d  lua %d KB  %s", free,
+                                            s.zonesBuilt or 0, self.genFor or 0.0, self.lastGen or 0.0,
+                                            self.zone1Seconds or 0.0, s.palette or 0,
+                                            (s.holding ~= nil) and "  HOLD" or "",
+                                            self.tickAvg or 0.0, self.genAvg or 0.0, math.floor(s.frame or 0),
+                                            math.floor(collectgarbage("count")), s.genError or ""))
+        self.freeText:SetPosition(28.0, 340.0)
+    else
+        self.freeText:SetText(string.format("free %d KB", free))
+        self.freeText:SetPosition(470.0, 22.0)
+    end
     -- and on the loading screen, which covers this: how far the loading has got
     if (TheLoading ~= nil) then
         local line = string.format("free %d KB", free)
@@ -464,11 +696,13 @@ function Sky:Tick(deltaTime)
     -- The sky stands still under the loading screen (it cannot be seen): its diamond show
     -- streams frames in and out all the time, and in the middle of a load those small blocks
     -- were cutting up the big holes the stage's pieces and the new stars need.
-    local loading = (self.going ~= nil and self.going.step < 3) or self.returning ~= nil
+    local loading = (self.going ~= nil and (self.going.step < 3 or self.going.step >= 25)) or self.returning ~= nil
     if (not loading) then pcTick(self, deltaTime) end
     if (self.going ~= nil) then self:TickGoing(deltaTime) end
     if (self.returning ~= nil) then self:TickReturning(deltaTime) end
     self:TestExit(deltaTime)
     self:TestPick(deltaTime)
+    self:TestMarathon(deltaTime)
+    self.lastTick = deltaTime
     self:TestFree()
 end

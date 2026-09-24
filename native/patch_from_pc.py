@@ -45,10 +45,10 @@ CHANGES = [
                                         -- 21,000 triangles and the far ones are not worth a draw call
 local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     ("    self.camera:SetFar(6000.0)\n", "    self.camera:SetFar(1200.0)\n"),
-    # -- each piece node remembers the frames it covers
+    # -- each piece node remembers the frames it covers (in LoadStage, and in a marathon's AppendZone)
     ("            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name, frame = piece.first_frame }\n",
      "            self.pieceNodes[#self.pieceNodes + 1] = { node = node, name = name, frame = piece.first_frame,\n"
-     "                                                      first = piece.first_frame, last = piece.last_frame }\n"),
+     "                                                      first = piece.first_frame, last = piece.last_frame }\n", 2),
     # ...and so does each straight of the lead-in laid behind the start: straight k back covers
     # frames -8k to -8k + 8 (a straight is eight frames)
     ("""            node:SetWorldRotationQuat(Vec(first.quat[1], first.quat[2], first.quat[3], first.quat[4]))
@@ -131,6 +131,146 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
         self.fpsTime, self.fpsFrames, self.worstFrame = 0.0, 0, 0.0
     end
 """),
+    # -- the stage plays itself: the PC's S2_AUTOPLAY, and GcTest.autoplay here (no environment)
+    ("""    self.autoplay = (os ~= nil and os.getenv ~= nil and os.getenv("S2_AUTOPLAY") ~= nil)
+""", """    self.autoplay = (os ~= nil and os.getenv ~= nil and os.getenv("S2_AUTOPLAY") ~= nil)
+                    or (GcTest ~= nil and GcTest.autoplay == true)
+"""),
+    # -- THE MARATHON'S COLOURS. On the PC a change of colours swaps every piece to another palette's
+    # meshes (SM_Piece_Drop_P3 for _P5), all seven palettes loaded as they come. Here two sets do not
+    # fit (2.8 MB each), and loading and freeing them each zone cut the heap up. The palettes are the
+    # same meshes painted differently, so here the meshes the run started with stay, and a change of
+    # colours RECOLOURS them in place (engine: StaticMesh:StageColorsFrom). The new colours, and the
+    # new sky's stars (Screens.lua's Sky:BeginStarSwap), are read in a little at a time through the
+    # hold, then put up at once.
+    ("""    local full = name .. palette
+""", """    local full = name .. (self.meshPalette or palette)  -- GAMECUBE: the meshes the stage began with
+"""),
+    ("""    self.palette = self.data.palette
+""", """    self.palette = self.data.palette
+    self.meshPalette = self.palette     -- GAMECUBE: the meshes' own colours; later ones are a recolour
+"""),
+    ("""function SpecialStage:SetPalette(n)
+    if (n == self.palette or self:PieceMesh(self.pieceNodes[1].name, n) == nil) then return end
+    self.palette = n
+    for _, p in ipairs(self.pieceNodes) do p.node:SetStaticMesh(self:PieceMesh(p.name, n)) end
+    if (TheSky ~= nil) then TheSky.sky = self.data.palette_skies[n] end
+end
+""", """function SpecialStage:SetPalette(n)
+    -- GAMECUBE: at once, all of it read now (the hold spreads it out instead: see TickFade)
+    if (n == self.palette or self.pieceMeshes == nil) then return end
+    local job = self:RecolourJob(n)
+    while (not self:StepRecolour(job)) do end
+    self:ApplyRecolour(job)
+end
+
+-- GAMECUBE: a change of colours, as a job: every piece mesh's new colours, and the new sky's stars.
+local RECOLOUR_MS = 5               -- milliseconds of reading a frame, through the hold
+local RECOLOUR_PIECE = 744          -- vertices a read: 32 KB of the file
+
+local function NowMs()
+    if (System.GetClockMs ~= nil) then return System.GetClockMs() end
+    return nil
+end
+
+function SpecialStage:RecolourJob(n)
+    local job = { to = n, meshes = {}, i = 1, at = 0 }
+    local own = tostring(self.meshPalette)
+    for full, mesh in pairs(self.pieceMeshes) do
+        if (mesh) then
+            job.meshes[#job.meshes + 1] = { mesh = mesh, from = full:sub(1, #full - #own) .. n }
+        end
+    end
+    table.sort(job.meshes, function(a, b) return a.from < b.from end)
+    if (TheSky ~= nil and TheSky.BeginStarSwap ~= nil) then TheSky:BeginStarSwap(self.data.palette_skies[n]) end
+    return job
+end
+
+-- A slice of the job; true once all of it is read.
+function SpecialStage:StepRecolour(job)
+    local t0 = NowMs()
+    repeat
+        local m = job.meshes[job.i]
+        if (m ~= nil) then
+            local nextAt, total = m.mesh:StageColorsFrom(m.from, job.at, RECOLOUR_PIECE)
+            if (nextAt < 0) then
+                Log.Warning("SpecialStage: no colours from " .. m.from)
+                job.i, job.at = job.i + 1, 0
+            elseif (nextAt >= total) then
+                job.i, job.at = job.i + 1, 0
+            else
+                job.at = nextAt
+            end
+        elseif (TheSky == nil or TheSky.StepStarSwap == nil or TheSky:StepStarSwap()) then
+            return true
+        end
+    until (t0 == nil or NowMs() - t0 >= RECOLOUR_MS)
+    return false
+end
+
+function SpecialStage:ApplyRecolour(job)
+    for _, m in ipairs(job.meshes) do m.mesh:ApplyStagedColors() end
+    self.palette = job.to
+    if (TheSky ~= nil) then
+        if (TheSky.SwitchStars ~= nil) then TheSky:SwitchStars() end
+        TheSky.sky = self.data.palette_skies[job.to]
+    end
+end
+"""),
+    ("""function SpecialStage:TickFade(dt)
+    local h = self.holding
+    if (h == nil) then return end
+    h.clock = h.clock + dt
+    if (h.clock >= SWITCH_AT) then
+        self:SetPalette(h.to)
+        self.holding = nil
+    end
+end
+
+function SpecialStage:EndFade()
+    self.holding = nil
+end
+""", """function SpecialStage:TickFade(dt)
+    local h = self.holding
+    if (h == nil) then return end
+    h.clock = h.clock + dt
+    -- GAMECUBE: read from the moment the hold begins; switched once read and SWITCH_AT is reached
+    if (h.to == self.palette) then
+        self.holding = nil
+        return
+    end
+    if (h.job == nil) then h.job = self:RecolourJob(h.to) end
+    if (self:StepRecolour(h.job) and h.clock >= SWITCH_AT) then
+        self:ApplyRecolour(h.job)
+        self.holding = nil
+    end
+end
+
+function SpecialStage:EndFade()
+    -- GAMECUBE: a change of sky part read is put right (the stars would be half one sky, half another)
+    if (self.holding ~= nil and self.holding.job ~= nil and TheSky ~= nil and TheSky.CancelStarSwap ~= nil) then
+        TheSky:CancelStarSwap()
+    end
+    self.holding = nil
+end
+"""),
+    # -- the first zone, and the run's seed, come from the loading screen (Screens.lua), which built
+    # the zone while it was up; and the generator is let go of after a run (Script.Run, not Require)
+    ("""    Script.Require("MarathonGen")
+    local kit = MarathonKit
+""", """    if (MarathonGen == nil) then Script.Run("MarathonGen") end     -- GAMECUBE: freed after a run
+    local kit = MarathonKit
+"""),
+    ("""    seed = math.floor(seed % 2147483647)
+""", """    seed = math.floor(seed % 2147483647)
+    if (MarathonSeed ~= nil) then seed = MarathonSeed end            -- GAMECUBE: Screens.lua's
+"""),
+    ("""    local zone = MarathonGen.BuildZone(seed, 1)
+    if (zone == nil) then return nil end
+""", """    local zone = MarathonFirstZone or MarathonGen.BuildZone(seed, 1)   -- GAMECUBE: built behind the loading screen
+    MarathonFirstZone, MarathonSeed = nil, nil
+    if (zone == nil) then return nil end
+"""),
     ("-- Keep alive only what is near the player.\n", """-- Show only the track near the player. (Two nodes a piece: the matte pipe and the glossy trim.)
 function SpecialStage:UpdatePieces()
     local lo, hi = self.frame - PIECES_BEHIND, self.frame + PIECES_AHEAD
@@ -154,9 +294,16 @@ end
 # Scripts that are the PC's with a change or two (or none).
 OTHERS = {
     "SpecialStageMusic.lua": [],
-    "PadInput.lua": [],
-    "SavePrompt.lua": [],
-    "Loading.lua": [],              # the PC's (which began as this build's own); scaled, so the same here           # the PC's; it speaks of slot A here, of the Saves folder there             # the controller, the PC's (which began as this build's own)
+    "PadInput.lua": [],             # the controller, the PC's (which began as this build's own)
+    "SavePrompt.lua": [],           # the PC's; it speaks of slot A here, of the Saves folder there
+    "Loading.lua": [],              # the PC's (which began as this build's own); scaled, so the same here
+    # A marathon's generator and what it builds from are the PC's. Both are let go of when a run
+    # ends (Screens.lua's TeardownStage), so they are read with Script.Run: Require reads a file
+    # only once in the life of the game.
+    "MarathonGen.lua": [("""Script.Require("MarathonKit")
+""", """if (MarathonKit == nil) then Script.Run("MarathonKit") end          -- GAMECUBE: freed after a run
+""")],
+    "MarathonKit.lua": [],
     # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
     # clear of the edges.
     "SpecialStageUI.lua": [("local SAFE_MARGIN = 0.0\n", "local SAFE_MARGIN = 0.04\n")],
@@ -196,7 +343,9 @@ Script.Require("Screens")       -- GAMECUBE: the menus, the loading screen, the 
     end
 """, """    self.window = {}
     self.medleyShown = nil          -- none of its diamond frames yet: the last sky's is not shown again
-    if (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
+    if (self.starSwap ~= nil and self.starSwap.switched and self.starSwap.sky == sky) then
+        -- a marathon's hold has read this sky's stars in already (Screens.lua's Sky:BeginStarSwap)
+    elseif (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
         -- THE SAME EIGHT TEXTURES, REFILLED: every sky's star frames are one size and format, so
         -- the new sky's texels go into the buffers already here (Texture:ReloadFrom, one frame a
         -- tick, Screens.lua's Sky:HoldStars). Freeing 4 MB of 512 KB frames and allocating 4 MB
@@ -334,17 +483,8 @@ end
     self:Show(self.open)
 end
 """),
-        # SAVE (the PC's too now) opens SavePrompt.lua, which talks about slot A here; the PC's
-        # LOAD is left off this menu (export_assets_gc.py), as the card is read at startup.
-        # MARATHON stays shut here: the PC plays one made ahead of time, and this machine has
-        # neither the memory for that nor (yet) the zones built on the fly.
-        ("""-- MARATHON is always open, by the owner's decision for now (it was to wait for the seventh
--- emerald; StageSelect.lua and Sky.lua still unlock it then, which changes nothing while it is open).
-""", """-- MARATHON is open on the PC; here it stays SHUT (patch_from_pc.py): this machine has neither the
--- memory for a marathon made ahead of time nor, yet, the zones built on the fly.
-"""),
-        ("""local UNLOCKED = { main_game = true, marathon = true, extras = false, chao_garden = false,""",
-         """local UNLOCKED = { main_game = true, marathon = false, extras = false, chao_garden = false,"""),
+        # (SAVE and LOAD, the PC's too, open SavePrompt.lua, which talks about slot A here. MARATHON
+        # is open, as on the PC: its zones are built as it is played, see Screens.lua.)
     ],
     # The stage select is the PC's, but for its previews. Each is a clip of 16 frames, and the PC
     # loads all seven stages' clips at once: 112 pictures, 3.5 MB here. So only the stage under

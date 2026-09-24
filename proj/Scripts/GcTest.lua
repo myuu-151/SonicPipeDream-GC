@@ -8,5 +8,12 @@
 --     exit = seconds    leave a stage that long after it starts, as EXIT from the pause menu does
 --     free = true       free memory, in KB, in the corner of every screen
 --     wait = seconds    how long the stage select shows before `pick` chooses (default 3)
+--     marathon = true   on the title menu, choose MARATHON by itself (after `wait`)
+--     hold = seconds    in a marathon, change its colours that often, as a zone's hold does
+--     holdTo = n        ...always to palette n (else the next one round)
+--     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)
+--     marathon = true   on the title menu, choose MARATHON by itself (after `wait`)
+--     hold = seconds    in a marathon, change its colours that often, as a zone's hold does
+--     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)
 
 GcTest = {}
