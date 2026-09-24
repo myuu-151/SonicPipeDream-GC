@@ -55,6 +55,11 @@ local MARATHON_BREATH = 40          -- MarathonGen.BREATH here: its work between
 local function BuildAssets()
     local names = { "SM_Ring", "SM_Bomb", "SM_PlayerBall", "SM_FxQuad", "SM_FxQuadBoom", "M_Explosion",
                     "SM_FxQuadRazor", "SM_FxQuadPuff", "SM_FxTrace", "SW_SpinRev", "SW_SpinRelease",
+                    -- every effect a stage plays, loaded at boot with the rest: the checkpoint and the
+                    -- emerald, the biggest, were loaded the first time each played and in a marathon's
+                    -- cut-up heap that could fail -- and then they were silent all run
+                    "SW_Ring", "SW_Jump", "SW_Checkpoint", "SW_GetEmerald", "SW_Fail", "SW_LoseRings",
+                    "SW_Explosion", "SW_ExitStage",
                     "SM_Shadow", "SM_Sonic_Idle_00", "SM_Emerald",
                     "T_UI_Emblem", "T_UI_EmblemRed", "T_UI_Flag", "T_UI_FlagLeft", "T_UI_SonicRings",
                     "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total", "T_UI_Lives" }
@@ -607,6 +612,7 @@ end
 -- GcTest.pick: the stage select chooses by itself, after showing for GcTest.wait seconds.
 function Sky:TestPick(deltaTime)
     if (GcTest == nil or GcTest.pick == nil or self.going ~= nil or self.returning ~= nil) then return end
+    if (GcTest.thenMarathon and self.picked) then return end
     local select = TheStageSelect
     if (select == nil or not select.built) then
         self.pickIn = GcTest.wait or 3.0
@@ -626,6 +632,7 @@ function Sky:TestPick(deltaTime)
     select.index = stage
     select:PlaceSelection()
     select:Refresh()
+    self.picked = true
     self:GoToStage(stage)
 end
 
@@ -638,6 +645,16 @@ function Sky:TestMarathon(deltaTime)
         self.marathonIn = (self.marathonIn or GcTest.wait or 3.0) - deltaTime
         if (self.marathonIn <= 0.0) then
             self.marathonIn = nil
+            self:GoToMarathon()
+        end
+    end
+    -- GcTest.thenMarathon: after `pick`'s one stage, back on the stage select, a marathon
+    if (GcTest.thenMarathon and self.picked and self.going == nil and self.returning == nil
+            and TheStageSelect ~= nil and TheStageSelect.built and TheStageSelect.open) then
+        self.marathonIn = (self.marathonIn or GcTest.wait or 3.0) - deltaTime
+        if (self.marathonIn <= 0.0) then
+            self.marathonIn = nil
+            TheStageSelect:Close()
             self:GoToMarathon()
         end
     end

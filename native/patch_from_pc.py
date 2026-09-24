@@ -9,6 +9,7 @@ means a gameplay fix on the PC arrives here by running this again -- and if the 
 moved so far that a change no longer fits, this stops and says which one.
 """
 
+import glob
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -577,10 +578,63 @@ def patch(name, text, changes):
     return text
 
 
+# THE MARATHON'S KIT IS READ IN SMALL FILES. As one 447 KB script it needed two blocks that size
+# at once to load (the file read, then the engine's copy of it for Lua), and after one run the heap
+# no longer had them: the second marathon of a session quit the game as the kit loaded. So its two
+# big tables, the pieces and the flavours, go out entry by entry into MarathonKit_1.lua,
+# MarathonKit_2.lua, ... of about KIT_PART bytes each, which MarathonKit.lua runs at its end; and
+# the indentation, a third of the file, is dropped.
+KIT_PART = 24 * 1024
+KIT_SPLIT = ("pieces", "flavours")
+
+
+def split_kit(text, scripts):
+    for old in glob.glob(os.path.join(scripts, "MarathonKit_*.lua")):
+        os.remove(old)
+    lines = text.split("\n")
+    main, parts, part = [], [], []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        key = next((k for k in KIT_SPLIT if line == "  %s = {" % k), None)
+        if key is None:
+            main.append(line.strip())
+            i += 1
+            continue
+        main.append("%s = {}," % key)
+        i += 1
+        while lines[i] != "  },":
+            head = lines[i]
+            assert head.startswith("    ") and head.endswith(" = {") and not head.startswith("     "), head
+            name = head.strip()
+            entry = ["MarathonKit.%s%s%s" % (key, "" if name.startswith("[") else ".", name)]
+            i += 1
+            while lines[i] != "    },":
+                entry.append(lines[i].strip())
+                i += 1
+            entry.append("}")
+            i += 1
+            size = sum(len(l) + 1 for l in entry)
+            if part and sum(len(l) + 1 for l in part) + size > KIT_PART:
+                parts.append(part)
+                part = []
+            part += entry
+        i += 1
+    if part:
+        parts.append(part)
+    for n, part in enumerate(parts, 1):
+        open(os.path.join(scripts, "MarathonKit_%d.lua" % n), "w", encoding="utf-8", newline="\n").write(
+            "-- FROM the PC repo's MarathonKit.lua, by native/patch_from_pc.py (split_kit).\n" + "\n".join(part) + "\n")
+    main.append('for i = 1, %d do Script.Run("MarathonKit_" .. i) end     -- the rest, in pieces: see split_kit' % len(parts))
+    return "\n".join(main) + "\n"
+
+
 def main():
     for name, changes in OTHERS.items():
         text = open(os.path.join(os.path.dirname(SRC), name), encoding="utf-8", newline="").read().replace("\r\n", "\n")
         text = patch(name, text, changes)
+        if (name == "MarathonKit.lua"):
+            text = split_kit(text, os.path.dirname(OUT))
         open(os.path.join(os.path.dirname(OUT), name), "w", encoding="utf-8", newline="\n").write(
             "-- FROM the PC repo, by native/patch_from_pc.py. Change it there.\n" + text)
     s = open(SRC, encoding="utf-8", newline="").read().replace("\r\n", "\n")
