@@ -11,6 +11,8 @@
 --     marathon = true   on the title menu, choose MARATHON by itself (after `wait`)
 --     thenMarathon = true   after `pick`'s one stage, back on the stage select, a MARATHON
 --     timeAttack = true     with `marathon`: a TIME ATTACK instead
+--     start = n             the run's starting difficulty (1-7); lives = n: a time attack's lives
+--     census = seconds      every asset's memory and the heap in the log that often (a log build)
 --     hold = seconds    in a marathon, change its colours that often, as a zone's hold does
 --     holdTo = n        ...always to palette n (else the next one round)
 --     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)

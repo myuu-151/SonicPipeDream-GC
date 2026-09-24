@@ -38,7 +38,13 @@ ASSETS = os.path.join(PROJ, "Assets", "Stage")
 # that run round the tube, and at 6 segments the bands fell between the vertices. What is short
 # is MEMORY (textures, audio), and that is where the GameCube build differs from the PC.
 RING_SPIN_FRAMES = 12               # as the PC; SpecialStage.lua counts the same
-BOMB_TEX_SIZE = 256                 # the bomb's texture here (the PC's is 1024): a bomb is small on a TV
+BOMB_TEX_SIZE = 128                 # the bomb's texture here (the PC's is 1024): a bomb is small on a TV
+# THE BOMB, LIGHTER: the owner's texture (bomb256.png) at BOMB_TEX_SIZE, on the textured mesh cut to
+# BOMB_TRIANGLES (from 4,000). As it was -- 256 x 256 on the full mesh, 280 KB loaded -- it was memory
+# a difficulty-7 marathon did not have. BOMB_VERTEX_LIT instead: no picture, lit by the console's
+# lights, colours from a swatch.
+BOMB_VERTEX_LIT = False
+BOMB_TRIANGLES = 1500
 
 source = open(PC_EXPORTER, encoding="utf-8").read()
 source = source[:source.rindex("\nmain()")]
@@ -232,6 +238,24 @@ def write_lit_swatched(name, index, mesh, colours, specular=0.85, shininess=48.0
     return len(idx) // 3
 
 
+def decimated(mesh, target):
+    """The mesh cut to about `target` triangles (Blender's collapse decimation), its materials and
+    smoothing kept. The original is left alone."""
+    bpy = pc["bpy"]
+    have = triangles(mesh)
+    if have <= target:
+        return mesh
+    obj = bpy.data.objects.new("_decimate", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    mod = obj.modifiers.new("decimate", "DECIMATE")
+    mod.ratio = target / float(have)
+    deps = bpy.context.evaluated_depsgraph_get()
+    out = bpy.data.meshes.new_from_object(obj.evaluated_get(deps))
+    bpy.data.objects.remove(obj)
+    print("bomb: %d -> %d triangles" % (have, triangles(out)))
+    return out
+
+
 def triangles(mesh):
     mesh.calc_loop_triangles()
     return len(mesh.loop_triangles)
@@ -281,15 +305,18 @@ def main():
     bomb_colours = [tuple(pc["linear_to_srgb"](x) for x in m.diffuse_color[:3]) for m in bomb.materials]
     # LIT, for real: see write_lit_swatched. (Painting the shading on, as the arch spheres have it,
     # was tried first and still read as unlit: a bomb turns with the pipe, and painted light does not.)
-    if os.path.exists(pc["BOMB_TEXTURED"]) and os.path.exists(pc["BOMB_LIT"]):
+    if BOMB_VERTEX_LIT:
+        write_lit_swatched("SM_Bomb", 0, decimated(bomb, BOMB_TRIANGLES), bomb_colours)
+    elif os.path.exists(pc["BOMB_TEXTURED"]) and os.path.exists(pc["BOMB_LIT"]):
         # THE PC'S TEXTURED BOMB (native/texture_bomb.py): its metal detail and lighting baked into
         # one picture, on a basic lit material, no vertex colours -- written by the PC's own writer,
         # the texture at BOMB_TEX_SIZE (the PC's is 1024).
         # The GameCube's texture is the 256 x 256 the project's owner made from Bomb_lit.png
-        # (external/bomb/bomb256.png), used as it is; without it, Bomb_lit.png scaled down.
+        # (external/bomb/bomb256.png), scaled to BOMB_TEX_SIZE; without it, Bomb_lit.png the same.
         own = os.path.join(os.path.dirname(pc["BOMB_LIT"]), "bomb256.png")
-        png, size = (own, None) if os.path.exists(own) else (pc["BOMB_LIT"], BOMB_TEX_SIZE)
-        pc["write_lit_textured"]("SM_Bomb", 220, from_blend(pc["BOMB_TEXTURED"], "Bomb"), png,
+        png = own if os.path.exists(own) else pc["BOMB_LIT"]
+        size = BOMB_TEX_SIZE
+        pc["write_lit_textured"]("SM_Bomb", 220, decimated(from_blend(pc["BOMB_TEXTURED"], "Bomb"), BOMB_TRIANGLES), png,
                                  "T_Bomb", "M_Bomb", size=size, basic=pc["BOMB_BASIC_LIT"])
     else:
         write_lit_swatched("SM_Bomb", 0, bomb, bomb_colours)

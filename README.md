@@ -49,6 +49,7 @@ freezes about 25 seconds in; the details are in the build notes.
 
 - [docs/gamecube-build.md](docs/gamecube-build.md): how the port is made from the PC repo, and how to build it.
 - [docs/gamecube-fixes.md](docs/gamecube-fixes.md): everything that had to change to run in 24 MB, and why.
+- [docs/gamecube-memory.md](docs/gamecube-memory.md): what fills memory in a run, the difficulty-7 fragmentation hunt, and what bigger GameCube games do differently.
 
 ## Credits
 

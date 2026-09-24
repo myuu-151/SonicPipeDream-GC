@@ -73,13 +73,16 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     # -- the readout goes and comes back with the stage (in Leave, then in Enter)
     ("{ self.player, self.playerShadow, self.uiNode }",
      "{ self.player, self.playerShadow, self.uiNode, self.debugNode }", 2),
-    # -- the HUD is the PC's (SpecialStageUI.lua, copied below). Beside it, one small line of text at
-    # the BOTTOM of the screen for the numbers a console build lives by: frame rate, the worst
-    # frame of the last half second, how much track is drawn, and free memory.
+    # -- the HUD is the PC's (SpecialStageUI.lua, copied below). Beside it, FOR TESTING ONLY
+    # (GcTest.readout), one small line of text at the BOTTOM of the screen for the numbers a console
+    # build lives by: frame rate, the worst frame of the last half second, how much track is drawn,
+    # and free memory. Off, it is not made at all: text redrawn twice a second is memory churned.
     ("""    local ui = world:SpawnNode("Canvas")
     ui:SetScript("SpecialStageUI")
 """, """    local ui = world:SpawnNode("Canvas")
     ui:SetScript("SpecialStageUI")
+    self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
+    if (GcTest ~= nil and GcTest.readout) then
     local debug = world:SpawnNode("Canvas")
     self.debugNode = debug
     debug:SetAnchorMode(AnchorMode.TopLeft)
@@ -102,7 +105,7 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
         line:SetText("")
         self.perfLines[i] = line
     end
-    self.fpsTime, self.fpsFrames, self.piecesShown = 0.0, 0, 0
+    end
 """),
     # (The light is the PC's, untouched. It was stronger here for a while, to give the arch spheres
     # some shape without the specular highlight the GameCube renderer lacks; now export_gc.py
@@ -116,7 +119,7 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     self:UpdatePieces()
     self.fpsTime, self.fpsFrames = self.fpsTime + deltaTime, self.fpsFrames + 1
     self.worstFrame = math.max(self.worstFrame or 0.0, deltaTime)      -- an average hides a spike; this does not
-    if (self.fpsTime >= 0.5) then
+    if (self.readout ~= nil and self.fpsTime >= 0.5) then
         local round = self.data.sections[math.min(self.section, #self.data.sections)]
         -- free memory, in KB: THE number on a 24 MB machine. (0 where the engine cannot tell.)
         local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or 0

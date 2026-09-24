@@ -244,6 +244,17 @@ def hud():
     pc_font.ONLY = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!-:."  # numbers, COOL !, the banners, IN-STAGE, a time 1:23.45
     pc_font.main()
     os.remove(pc_font.LOOK)
+    # THE ATLAS AS RGB5A3 (the engine's RGBA5551), not RGBA8: 256 KB loaded instead of 512 KB, the
+    # face's white-to-blue shading and the soft edges kept (16 bits a texel; a greyscale format
+    # would lose the blue and band the shading). It stays Force High Quality, so the project's
+    # CMPR cook leaves it alone and the cook writes the format asked for.
+    import struct
+    d = bytearray(open(pc_font.OUT, "rb").read())
+    fmt = struct.pack("<IIII", pc_font.ATLAS_W, pc_font.ATLAS_H, 1, 1) + struct.pack("<III", 2, 1, 0)
+    at = d.find(fmt)
+    assert at > 0, "the font's texture header"
+    d[at + 16:at + 20] = struct.pack("<I", 4)
+    open(pc_font.OUT, "wb").write(bytes(d))
 
     pc_fx.OUT = os.path.join(PROJ, "Assets", "Stage", "FX")
     pc_fx.LOOK = os.path.join(PROJ, "Assets", "Stage", "FX")        # its look-at PNGs: removed again below

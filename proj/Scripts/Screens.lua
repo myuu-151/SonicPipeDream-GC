@@ -91,12 +91,18 @@ function LoadStageData(n)
 end
 
 -- ------------------------------------------------------------------ the menus
+SKY_FRAME_BYTES = 64 * 1024
+
 function Sky:ShowMenu()
     -- What every stage uses -- Sonic, the HUD's art, the rings, the bomb, the effects -- is loaded
     -- ONCE, here at boot, before anything else, and kept for the whole session (the stage's NODES
     -- are still torn down between stages; see TeardownStage). Loaded first it sits together at
     -- the bottom of the heap, out of the way; loaded and freed with each stage it was 3 MB more
     -- of the churn that cut the heap up.
+    -- The sky's diamond frames (512 x 256 CMPR: 64 KB and a header each) stream in and out all the
+    -- time; their blocks are kept for them and never given back to the heap (System.PinBlocks), or
+    -- a busy marathon cut the heap up until, with 1.7 MB free, no frame could find 64 KB.
+    if (self.kept == nil and System.PinBlocks ~= nil) then System.PinBlocks(SKY_FRAME_BYTES) end
     self.kept = {}
     for _, name in ipairs(BuildAssets()) do self.kept[#self.kept + 1] = LoadAsset(name) end
     self:SpawnLoading()
@@ -644,6 +650,20 @@ end
 -- GcTest.hold = seconds: in a marathon, a change of colours that often, as a zone's hold makes.
 function Sky:TestMarathon(deltaTime)
     if (GcTest == nil) then return end
+    if (GcTest.start ~= nil) then         -- the run's starting difficulty, 1-7
+        GameOptions.marathon.start, GameOptions.timeAttack.start = GcTest.start, GcTest.start
+    end
+    if (GcTest.lives ~= nil) then GameOptions.timeAttack.lives = GcTest.lives end
+    -- GcTest.census = seconds: every asset's memory and the heap, logged that often (Dolphin log build)
+    if (GcTest.census ~= nil and System.MemoryCensus ~= nil) then
+        self.censusIn = (self.censusIn or GcTest.census) - deltaTime
+        if (self.censusIn <= 0.0) then
+            self.censusIn = GcTest.census
+            local s = TheSpecialStage
+            Log.Debug(string.format("CENSUS --- zones built %s, section %s", tostring(s and s.zonesBuilt), tostring(s and s.section)))
+            System.MemoryCensus(30)
+        end
+    end
     if (GcTest.marathon and self.going == nil and self.returning == nil and TheMenu ~= nil
             and TheMenu.built and TheMenu.open and not TheMenu.busy) then
         self.marathonIn = (self.marathonIn or GcTest.wait or 3.0) - deltaTime
