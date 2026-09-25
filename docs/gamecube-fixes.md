@@ -142,7 +142,8 @@ About 28 fps with stutter at first; 55-60 fps after, measured each step from the
   their vertices by `export_gc.py`.
 - **The HUD** keeps 4% clear of the screen's edges, for a TV's overscan.
 - **Saves** go to the memory card in slot A, only once the player has chosen SAVE on the title
-  menu. The engine's save writer gained a comment and an icon (`System.SetSaveInfo`), a check of
+  menu. The engine's save writer gained a comment, a banner and a still or animated icon
+  (`System.SetSaveInfo`), a check of
   the card before writing (`System.GetSaveCard`: no card, full, blocks needed and free), and no
   longer leaks its 40 KB work area each time it finds no card.
 - **The disc banner** is `native/banner.png`, made into `proj/opening.bnr` by

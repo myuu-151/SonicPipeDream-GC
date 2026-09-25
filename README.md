@@ -29,8 +29,8 @@ Attack, the same menus, skies and music, at 55-60 frames a second on a real Game
 - **Spin dash.** Curl up and skid to a stop, rev, and let go to blast off down the pipe.
 - **Eight animated skies**, streamed from the disc as they play.
 - **A stage select** with a moving preview of every stage.
-- **Save and Load** from the title menu, to the memory card in slot A (1 block, with its own icon
-  and banner). After the first save, every emerald you win is saved as you win it.
+- **Save and Load** from the title menu, to the memory card in slot A (2 blocks, with its own
+  banner and an icon whose emerald cycles through all seven colours). After the first save, every emerald you win is saved as you win it.
 - **Music** streamed from the disc, the full set of sound effects, and **Options** to turn off the
   music in the stages.
 

@@ -105,10 +105,13 @@ on the frozen game to find; the symptom looks like anything but audio.
 
 **Saving.** SAVE, the title menu's fifth item (the GameCube's own), opens `SavePrompt.lua`: what
 is in slot A -- no card, not a memory card, damaged or unformatted, another region's, FULL, or
-ready -- with the blocks the save needs (1) and the blocks free. A saves. Nothing is written to a
+ready -- with the blocks the save needs (2) and the blocks free. A saves. Nothing is written to a
 card until the player has saved there once; after that each emerald won is saved into the file
-(`StageSelect:SaveWon`, patched by `patch_from_pc.py`). The save carries a title, a description
-and a 32 x 32 icon for the card's own screen: `native/save_icon.png`, made into
-`proj/Scripts/SaveInfo.lua` by `native/make_save_icon.py`. In the file the 64-byte comment comes
-first, then the icon, then the emeralds: libogc only takes an icon that starts in a file's first
-512 bytes.
+(`StageSelect:SaveWon`, patched by `patch_from_pc.py`). The save carries a title, a description,
+a banner and an animated 32 x 32 icon for the card's own screen: `native/banner.png` and
+`native/save_icon.png`, made into `proj/Scripts/SaveInfo.lua` by `native/make_save_icon.py`. The
+icon is seven CI8 frames sharing one palette, the emerald recoloured to each stage's emerald in
+turn (the PC's `gen_menu_assets.py` recolouring), 12 retraces a frame, in a loop. In the file the
+64-byte comment comes first, then the banner and its palette, then the icon's frames and their
+palette, then the emeralds: libogc only takes pictures that start in a file's first 512 bytes.
+The frames are 7.5 KB, which takes the save from one block to two.
