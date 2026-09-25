@@ -2,7 +2,7 @@
 
 # Sonic Pipe Dream (GameCube)
 
-**Sonic 2's special stage, reborn as a 3D half-pipe racer for the Nintendo GameCube.**
+**Sonic 2's iconic half-pipe special stage, reimagined in full 3D for the Nintendo GameCube.**
 
 > **In active development.** Sonic Pipe Dream is a work in progress: stages, controls and the way
 > it plays may change from one build to the next, and some features are not there yet.
