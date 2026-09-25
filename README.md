@@ -7,12 +7,7 @@
 > **In active development.** Sonic Pipe Dream is a work in progress: stages, controls and the way
 > it plays may change from one build to the next, and some features are not there yet.
 
-The GameCube version of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipeDream). Race
-Sonic down a twisting half-pipe that hangs in a sky full of shifting diamonds, grab the rings,
-dodge the bombs, and pass all three ring checks to win each stage's chaos emerald.
-
-It is the whole game, on a machine with 24 MB of memory: the same seven stages, Marathon and Time
-Attack, the same menus, skies and music, at 55-60 frames a second on a real GameCube.
+The GameCube version of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipeDream).
 
 ## Features
 
