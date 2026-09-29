@@ -13,25 +13,6 @@
 
 The GameCube version of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipeDream).
 
-## Features
-
-- **Seven stages**, each with its own track, its own pipe colours, its own sky, its own music and
-  its own chaos emerald.
-- **Marathon**: one run made as you play it, a new one every time, built on the console while you
-  run. Zone after zone, it gets harder as it goes, and after every zone the pipe and the sky change
-  colour while Sonic takes a victory lap. Play 1 to 20 zones or go on without end, and choose how
-  hard it starts, how fast it climbs and how many spare rings it gives you.
-- **Time Attack**: the marathon against a clock that counts down. Every check passed puts time
-  back. Rings only save you from a hit, and a hit takes them all; with no rings, a hit costs a life.
-- **Run anywhere round the pipe**, wind up speed by holding a direction, leap across to the far
-  wall, drop dash straight back down, or hold jump through a landing to bounce highest.
-- **Spin dash.** Curl up and skid to a stop, rev, and let go to blast off down the pipe.
-- **Eight animated skies**, streamed from the disc as they play.
-- **A stage select** with a moving preview of every stage.
-- **Save and Load** from the title menu, to the memory card in slot A (2 blocks, with its own
-  banner and an icon whose emerald cycles through all seven colours). After the first save, every emerald you win is saved as you win it.
-- **Music** streamed from the disc, the full set of sound effects, and **Options** to turn off the
-  music in the stages.
 
 ## Controls
 
