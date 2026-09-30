@@ -49,7 +49,8 @@ local WAIT_AT_MOST = 30.0           -- seconds: a stage starts even if something
                                     -- rather than leaving the loading screen up for ever
 local MARATHON_BUILD_MS = 30        -- a marathon's first zone: milliseconds of building a frame,
                                     -- behind the loading screen (it keeps moving)
-local MARATHON_BREATH = 40          -- MarathonGen.BREATH here: its work between yields
+local MARATHON_BREATH = 20          -- MarathonGen.BREATH here: its work between yields (at 40, a
+                                    -- piece overran the play frame's 2 ms and it fell to 30 fps)
 
 -- Everything SpecialStage:Build loads, the first time a stage is played. Asked for with the
 -- stage's own assets, so that first time is no slower to leave the loading screen.
@@ -850,6 +851,20 @@ function Sky:TestMarathon(deltaTime)
     end
 end
 
+-- The next sky's stash, for the readout: which sky, how many of its 8 frames are in ARAM, how
+-- long it has been at it; the one queued behind it; and the sky's stars' own sky and swap.
+function Sky:StashReadout()
+    local st = self.stash
+    local line = "stash none"
+    if (st ~= nil) then
+        line = string.format("stash sky %d  %d/8  %.1f s%s", st.sky, math.min(st.k - 1, 8), st.took or 0.0,
+                             st.failed and "  FAILED" or "")
+    end
+    if (self.stashNext ~= nil) then line = line .. "  next " .. self.stashNext end
+    return line .. string.format("  stars %s  shown %d%s", tostring(self.starsSky), self.shownSky or -1,
+                                 (self.starSwap ~= nil) and ("  SWAP " .. self.starSwap.k .. "/8") or "")
+end
+
 -- GcTest.free: free memory in the corner of every screen, drawn over everything.
 function Sky:TestFree()
     if (GcTest == nil or not GcTest.free or System.GetFreeMemory == nil) then return end
@@ -900,7 +915,9 @@ function Sky:TestFree()
                                             self.zone1Seconds or 0.0, s.palette or 0,
                                             (s.holding ~= nil) and "  HOLD" or "",
                                             self.tickAvg or 0.0, self.genAvg or 0.0, math.floor(s.frame or 0),
-                                            math.floor(collectgarbage("count")), s.genError or ""))
+                                            math.floor(collectgarbage("count")), s.genError or "")
+                                            .. "
+" .. self:StashReadout())
         self.freeText:SetPosition(28.0, 340.0)
     elseif (s ~= nil and s.sounds ~= nil) then
         -- a stage: which of its sounds have been asked for, and any that would not load

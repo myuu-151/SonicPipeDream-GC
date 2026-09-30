@@ -292,6 +292,12 @@ end
     local nextSky = data.palette_skies[data.sections[s0 + 1].palette]
     if (TheSky ~= nil and TheSky.StashSky ~= nil and nextSky ~= nil) then TheSky:StashSky(nextSky) end
     print(string.format("MARATHON zone %d joined"""),
+    # -- THE ZONE BUILD KEEPS TO ITS SLICE. It starts on the emerald, as the camera swings round
+    # to Sonic's side, and at 4 ms a frame -- overrunning that, a piece of work at a time, with the
+    # collector close behind it (Screens.lua) -- it dropped the game to 30 fps just then: the
+    # camera's swing stepped, and Sonic seemed to be pulled back. Half the slice, and (Screens.lua)
+    # half the work between yields: the build takes a second or two longer, and the frames hold.
+    ("local GEN_SLICE_MS = 4 ", "local GEN_SLICE_MS = 2 "),
     # -- A ZONE IS JOINED A SLICE A FRAME, as it is built. Joined in one go it was a third of a second
     # in one frame -- its ~3000 frames of centre line turned into place, a table or more each, and
     # every piece spawned -- and the frame after it moved Sonic a third of a second at once: he
@@ -341,6 +347,60 @@ end
     ("""        self:SpawnArch(s)
 """, """        self:SpawnArch(s)
         if (coroutine.isyieldable()) then coroutine.yield() end                    -- GAMECUBE: a slice a frame
+"""),
+    # -- A ZONE'S JOIN IS EVENLY SPACED. The centre line is sampled a step (5.02) at a time, and a
+    # zone's length is never a whole number of steps: its last sample, its very end, lies a fraction
+    # of a step past the one before (0.02 of one, in one zone). So for that one frame of track Sonic
+    # all but stopped, the camera (3.2 frames behind) closed in, then stopped there in turn as he
+    # went on -- a rubber band just after every hold, where the next zone joins (never at a check,
+    # where nothing is joined). The samples round the join are spaced out evenly again: the track
+    # is straight there (the hold's straights), so it is only their spacing that changes.
+    ("""    for i, e in ipairs(zone.path) do
+""", """    local joinAt = #data.path                   -- GAMECUBE: the last zone's end (see below)
+    for i, e in ipairs(zone.path) do
+"""),
+    ("""        if (i % 128 == 0 and coroutine.isyieldable()) then coroutine.yield() end   -- GAMECUBE: a slice a frame
+    end
+    for _, sec in ipairs(zone.sections) do""", """        if (i % 128 == 0 and coroutine.isyieldable()) then coroutine.yield() end   -- GAMECUBE: a slice a frame
+    end
+    -- GAMECUBE: the frames round the join, a whole step apart again on average (see above)
+    local a, b = joinAt - 4, joinAt + 4
+    if (joinAt > 0 and a >= 1 and b <= #data.path) then
+        local path, cum = data.path, { 0.0 }
+        for k = a + 1, b do
+            local p, q = path[k - 1], path[k]
+            cum[#cum + 1] = cum[#cum] + math.sqrt((q[1] - p[1]) ^ 2 + (q[2] - p[2]) ^ 2 + (q[3] - p[3]) ^ 2)
+        end
+        local placed, seg = {}, 1
+        for k = a + 1, b - 1 do
+            local want = cum[#cum] * (k - a) / (b - a)
+            while (seg < #cum - 1 and cum[seg + 1] < want) do seg = seg + 1 end
+            local span = cum[seg + 1] - cum[seg]
+            local t = (span > 0.0) and (want - cum[seg]) / span or 0.0
+            local p, q = path[a + seg - 1], path[a + seg]
+            local e = {}
+            for c = 1, 9 do e[c] = p[c] + (q[c] - p[c]) * t end
+            placed[k] = e
+        end
+        for k = a + 1, b - 1 do path[k] = placed[k] end
+    end
+    for _, sec in ipairs(zone.sections) do"""),
+    # -- THE RUN-OUT GOES ON A WHOLE STEP A FRAME, and he may run on down it. It was stepped by the
+    # centre line's LAST step -- and a zone's last sample is its very end, a fraction of a step past
+    # the one before (see the join, above) -- so the run-out barely went anywhere: its pieces, laid
+    # a step x 8 apart, were all but on top of each other (the flickering, doubled pipe at a run's
+    # end), and he was held at the old end anyway (data.frames), so the run seemed cut short.
+    ("""    local e, d = path[n], path[n - 1]
+    local sx, sy, sz = e[1] - d[1], e[2] - d[2], e[3] - d[3]
+    for i = 1, want do
+        path[n + i] = { e[1] + sx * i, e[2] + sy * i, e[3] + sz * i, e[4], e[5], e[6], e[7], e[8], e[9] }
+    end
+""", """    local e, d, c = path[n], path[n - 1], path[n - 2]
+    local sx, sy, sz = d[1] - c[1], d[2] - c[2], d[3] - c[3]          -- GAMECUBE: a whole step (see above)
+    for i = 1, want do
+        path[n + i] = { e[1] + sx * i, e[2] + sy * i, e[3] + sz * i, e[4], e[5], e[6], e[7], e[8], e[9] }
+    end
+    data.frames = math.max(data.frames or 0, (data.pathBase or 0) + #path - 1)   -- GAMECUBE: he runs on down it
 """),
     # -- THE RUN'S CENTRE LINE HOLDS ONLY WHAT IS NEAR HIM AND AHEAD. The PC's keeps every frame of
     # the run in one table, a slot a frame, for as long as the run goes on; past 8192 frames (the

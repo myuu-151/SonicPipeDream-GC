@@ -642,7 +642,7 @@ end
 -- on the end of the track when it is done: its start set down exactly on the last one's end,
 -- turned to carry on from it. Each zone gets a colour theme at random, never the last one's.
 -- What has been passed goes, so a run can go on for as long as the player does.
-local GEN_SLICE_MS = 4              -- milliseconds of building a frame, where the clock can be read
+local GEN_SLICE_MS = 2              -- milliseconds of building a frame, where the clock can be read
 local BEHIND_FRAMES = 160           -- track kept behind him; pieces, arches and items further back go
 
 -- Milliseconds, read NOW (not the frame's time): the engine's clock where it has one -- the
@@ -741,6 +741,7 @@ function SpecialStage:JoinZone(data, zone)
     -- The zone's own tables are TAKEN, moved into place, not copied: at difficulty 7 a zone is some
     -- 3000 frames and 1500 rings and bombs, and a copy of each, made while the zone's were still
     -- alive, was what ran a console's heap out as the second zone joined.
+    local joinAt = #data.path                   -- GAMECUBE: the last zone's end (see below)
     for i, e in ipairs(zone.path) do
         if (#data.path == 0 or i > 1) then           -- the join is one frame, the last zone's end
             local p = Put({ e[1], e[2], e[3] })
@@ -750,6 +751,27 @@ function SpecialStage:JoinZone(data, zone)
             data.path[#data.path + 1] = e
         end
         if (i % 128 == 0 and coroutine.isyieldable()) then coroutine.yield() end   -- GAMECUBE: a slice a frame
+    end
+    -- GAMECUBE: the frames round the join, a whole step apart again on average (see above)
+    local a, b = joinAt - 4, joinAt + 4
+    if (joinAt > 0 and a >= 1 and b <= #data.path) then
+        local path, cum = data.path, { 0.0 }
+        for k = a + 1, b do
+            local p, q = path[k - 1], path[k]
+            cum[#cum + 1] = cum[#cum] + math.sqrt((q[1] - p[1]) ^ 2 + (q[2] - p[2]) ^ 2 + (q[3] - p[3]) ^ 2)
+        end
+        local placed, seg = {}, 1
+        for k = a + 1, b - 1 do
+            local want = cum[#cum] * (k - a) / (b - a)
+            while (seg < #cum - 1 and cum[seg + 1] < want) do seg = seg + 1 end
+            local span = cum[seg + 1] - cum[seg]
+            local t = (span > 0.0) and (want - cum[seg]) / span or 0.0
+            local p, q = path[a + seg - 1], path[a + seg]
+            local e = {}
+            for c = 1, 9 do e[c] = p[c] + (q[c] - p[c]) * t end
+            placed[k] = e
+        end
+        for k = a + 1, b - 1 do path[k] = placed[k] end
     end
     for _, sec in ipairs(zone.sections) do
         j.quota = j.quota + sec.asks
@@ -978,11 +1000,12 @@ function SpecialStage:LayRunOut(seconds)
     if (want <= 0 or last == nil or #path < 9) then return end
     -- the centre line: one frame's step, on and on, facing as the last frame does
     local n = #path
-    local e, d = path[n], path[n - 1]
-    local sx, sy, sz = e[1] - d[1], e[2] - d[2], e[3] - d[3]
+    local e, d, c = path[n], path[n - 1], path[n - 2]
+    local sx, sy, sz = d[1] - c[1], d[2] - c[2], d[3] - c[3]          -- GAMECUBE: a whole step (see above)
     for i = 1, want do
         path[n + i] = { e[1] + sx * i, e[2] + sy * i, e[3] + sz * i, e[4], e[5], e[6], e[7], e[8], e[9] }
     end
+    data.frames = math.max(data.frames or 0, (data.pathBase or 0) + #path - 1)   -- GAMECUBE: he runs on down it
     -- the pieces: the last one again, a straight's length (eight frames) further each time
     local world = self:GetWorld()
     local lengths = math.ceil(want / 8)
