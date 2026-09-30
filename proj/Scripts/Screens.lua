@@ -88,6 +88,12 @@ function LoadStageData(n)
         if (k ~= n) then _G["StageData" .. k] = nil end
     end
     if (_G["StageData" .. n] == nil) then Script.Run("StageData" .. n) end
+    if (_G["StageData" .. n] == nil) then
+        -- (the stage then falls back to stage 1: say why, where a console's log can show it)
+        local free = (System.GetFreeMemory ~= nil) and (System.GetFreeMemory() // 1024) or -1
+        Log.Warning(string.format("StageData%s did not load: %d KB free, Lua %d KB", tostring(n), free,
+                                  math.floor(collectgarbage("count"))))
+    end
     return _G["StageData" .. n]
 end
 
@@ -106,15 +112,12 @@ function Sky:ShowMenu()
     -- of the churn that cut the heap up.
     -- The sky's diamond frames (512 x 256 CMPR: 64 KB and a header each) stream in and out all the
     -- time; their blocks are kept for them and never given back to the heap (System.PinBlocks), or
-    -- a busy marathon cut the heap up until, with 1.7 MB free, no frame could find 64 KB. And they
-    -- are RESERVED, taken now while the heap is in one piece: pinned only, a change of sky (the new
-    -- sky's frames asked for before the last sky's have gone) still had to find blocks in the heap,
-    -- and in a long marathon found none ("could not allocate 65600 bytes"). The same for the 32 KB
-    -- window every asset is read through (Stream.cpp): once none could be had, nothing loaded.
-    if (self.kept == nil and System.PinBlocks ~= nil) then
-        System.PinBlocks(SKY_FRAME_BYTES, 8, true)
-        System.PinBlocks(32 * 1024, 2, true)
-    end
+    -- a busy marathon cut the heap up until, with 1.7 MB free, no frame could find 64 KB. The size
+    -- is the block's true one, header and all: pinned at 64 KB, no frame's block was ever kept. (Not
+    -- RESERVED at boot as well, taken for good before anything else: 590 KB held all session, with
+    -- the read windows', left a stage's data -- up to 200 KB of script, read and compiled in big
+    -- pieces -- nowhere to go after a few stages, and every stage after that loaded as stage 1.)
+    if (self.kept == nil and System.PinBlocks ~= nil) then System.PinBlocks(SKY_FRAME_BYTES) end
     -- The stage's biggest pieces' blocks, likewise: reserved now, while the heap is in one piece,
     -- and kept between stages. Given back to the heap, the next stage's script and sky cut them up,
     -- and three stages into a session a rise piece found no 156 KB anywhere: the loading screen
@@ -478,6 +481,13 @@ function Sky:TeardownStage()
     for k = 1, STAGES do _G["StageData" .. k] = nil end
     MarathonGen, MarathonKit, MarathonFirstZone, MarathonSeed = nil, nil, nil, nil
     PipePalettes = nil
+    -- The next sky's stash gives its 4 MB of ARAM back: the star textures are kept for the session,
+    -- and their stash blocks with them left too little ARAM for a stage's music (8 MB, intro and
+    -- loop) after a marathon -- the main game's tracks would not load.
+    self.stash, self.stashNext = nil, nil
+    for _, frame in ipairs(self.starFrames or {}) do
+        if (frame.FreeStash ~= nil) then frame:FreeStash() end
+    end
     collectgarbage("setpause", 200)                 -- Lua's own pace again (see TickGoing, step 25)
     collectgarbage("setstepmul", 200)
     Sweep()
@@ -598,6 +608,8 @@ end
 -- NOTHING HERE READS THE CARD, NOT EVEN A HEADER: the reader thread finds each file's texels
 -- itself. (It did read each frame's header here, and waiting behind the background reads that was
 -- a 70-160 ms stutter eight times a zone.) Warnings, so that a console's SD log shows them.
+local STASH_AFTER_SWITCH = 6.0      -- seconds after a change of sky before the next stash begins
+
 function Sky:StashSky(sky)
     if (self.starFrames == nil or self.starFrames[8] == nil or self.starFrames[1].StashFrom == nil) then return end
     local st = self.stash
@@ -615,6 +627,7 @@ end
 -- True while the stars of `sky` are still being stashed: the change of sky waits for them, the
 -- twinkle carrying on meanwhile, rather than reading them off the card at the hold.
 function Sky:StashPending(sky)
+    if (self.stashNext == sky) then return true end     -- queued behind the last: its turn is coming
     local st = self.stash
     return st ~= nil and st.sky == sky and st.k <= 8 and not st.failed
 end
@@ -624,6 +637,11 @@ function Sky:StashStep(deltaTime)
     if (st.k > 8 or st.failed) then
         -- this one up (or given up on): the next zone's, if it is waiting
         if (self.stashNext ~= nil and (st.failed or (self.shownSky == st.sky and self.starSwap == nil))) then
+            -- ...but not at once: the sky just put up is streaming its diamond frames in from
+            -- nothing, and a stash begun then took the card from them -- the new sky ran at a low
+            -- frame rate for the first 15 seconds. It has a whole zone to be read in.
+            st.upFor = (st.upFor or 0.0) + deltaTime
+            if (st.upFor < STASH_AFTER_SWITCH) then return end
             local sky = self.stashNext
             self.stash, self.stashNext = nil, nil
             self:StashSky(sky)
@@ -780,6 +798,7 @@ end
 function Sky:TestPick(deltaTime)
     if (GcTest == nil or GcTest.pick == nil or self.going ~= nil or self.returning ~= nil) then return end
     if (GcTest.thenMarathon and self.picked) then return end
+    if (GcTest.marathonFirst and not self.marathonDone) then return end   -- the marathon goes first
     local select = TheStageSelect
     if (select == nil or not select.built) then
         self.pickIn = GcTest.wait or 3.0
@@ -823,10 +842,12 @@ function Sky:TestMarathon(deltaTime)
         end
     end
     if (GcTest.marathon and self.going == nil and self.returning == nil and TheMenu ~= nil
-            and TheMenu.built and TheMenu.open and not TheMenu.busy) then
+            and TheMenu.built and TheMenu.open and not TheMenu.busy
+            and not (GcTest.marathonFirst and self.marathonDone)) then
         self.marathonIn = (self.marathonIn or GcTest.wait or 3.0) - deltaTime
         if (self.marathonIn <= 0.0) then
             self.marathonIn = nil
+            self.marathonDone = true
             self:GoToMarathon(GcTest.timeAttack and "timeAttack" or "marathon")
         end
     end
@@ -916,8 +937,7 @@ function Sky:TestFree()
                                             (s.holding ~= nil) and "  HOLD" or "",
                                             self.tickAvg or 0.0, self.genAvg or 0.0, math.floor(s.frame or 0),
                                             math.floor(collectgarbage("count")), s.genError or "")
-                                            .. "
-" .. self:StashReadout())
+                                            .. "\n" .. self:StashReadout())
         self.freeText:SetPosition(28.0, 340.0)
     elseif (s ~= nil and s.sounds ~= nil) then
         -- a stage: which of its sounds have been asked for, and any that would not load

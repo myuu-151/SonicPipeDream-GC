@@ -9,6 +9,7 @@
 --     free = true       free memory, in KB, in the corner of every screen
 --     wait = seconds    how long the stage select shows before `pick` chooses (default 3)
 --     marathon = true   on the title menu, choose MARATHON by itself (after `wait`)
+--     marathonFirst = true  with `marathon` and `pick`: the marathon once, then `pick`'s stages
 --     thenMarathon = true   after `pick`'s one stage, back on the stage select, a MARATHON
 --     timeAttack = true     with `marathon`: a TIME ATTACK instead
 --     start = n             the run's starting difficulty (1-7); lives = n: a time attack's lives

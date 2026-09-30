@@ -845,6 +845,13 @@ function SpecialStage:TickMarathonGen()
         local seed, z = self.runSeed, self.zonesBuilt + 1
         self.gen = coroutine.create(function() return MarathonGen.BuildZone(seed, z) end)
         self:TrimBehind()
+        -- GAMECUBE: its colours as JoinZone will draw them (nothing draws in between), its sky stashed now
+        local j = self.data.join
+        local r = math.floor((j.rng * 1103515245 + 12345) % 2147483648)
+        local pal = math.floor((r // 65536) % 7) + 1
+        if (pal == j.lastPalette) then pal = pal % 7 + 1 end
+        local sky = self.data.palette_skies[pal]
+        if (TheSky ~= nil and TheSky.StashSky ~= nil and sky ~= nil) then TheSky:StashSky(sky) end
     end
     if (self.gen == nil) then return end
     local t0 = ClockMs()

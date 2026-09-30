@@ -402,6 +402,23 @@ end
     end
     data.frames = math.max(data.frames or 0, (data.pathBase or 0) + #path - 1)   -- GAMECUBE: he runs on down it
 """),
+    # -- THE NEXT SKY IS STASHED FROM THE START OF ITS ZONE'S BUILD, not from its join: its colours
+    # are the next draw of JoinZone's own generator, known now, and the build and join took long
+    # enough on a console that the stash was still being read at the emerald.
+    ("""        self.gen = coroutine.create(function() return MarathonGen.BuildZone(seed, z) end)
+        self:TrimBehind()
+    end
+""", """        self.gen = coroutine.create(function() return MarathonGen.BuildZone(seed, z) end)
+        self:TrimBehind()
+        -- GAMECUBE: its colours as JoinZone will draw them (nothing draws in between), its sky stashed now
+        local j = self.data.join
+        local r = math.floor((j.rng * 1103515245 + 12345) % 2147483648)
+        local pal = math.floor((r // 65536) % 7) + 1
+        if (pal == j.lastPalette) then pal = pal % 7 + 1 end
+        local sky = self.data.palette_skies[pal]
+        if (TheSky ~= nil and TheSky.StashSky ~= nil and sky ~= nil) then TheSky:StashSky(sky) end
+    end
+"""),
     # -- THE RUN'S CENTRE LINE HOLDS ONLY WHAT IS NEAR HIM AND AHEAD. The PC's keeps every frame of
     # the run in one table, a slot a frame, for as long as the run goes on; past 8192 frames (the
     # fourth zone or so) Lua wanted that table's slots in one 128 KB block, which a console's heap, in
