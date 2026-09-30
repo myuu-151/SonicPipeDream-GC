@@ -101,10 +101,23 @@ function Sky:LoadSky(sky)
 
     -- Held so the frames are not loaded and unloaded every time one comes back
     -- around.
+    -- The last sky's diamond frames let go of NOW (Asset:Release, then the sweep), not left in a
+    -- dropped table until Lua's collector came round: that kept up to six 64 KB frames while the
+    -- new sky's loaded on top of them. (The one on show is the material's until a new one goes up.)
+    for _, w in pairs(self.window or {}) do
+        if (w.asked ~= nil and w.asked.Release ~= nil) then
+            w.asked:Release()
+            if (w.tex ~= nil) then w.tex:Release() end
+        end
+    end
     self.window = {}
+    RefSweep()
     self.medleyShown = nil          -- none of its diamond frames yet: the last sky's is not shown again
-    if (self.starSwap ~= nil and self.starSwap.switched and self.starSwap.sky == sky) then
-        -- a marathon's hold has read this sky's stars in already (Screens.lua's Sky:BeginStarSwap)
+    if ((self.starSwap ~= nil and self.starSwap.switched and self.starSwap.sky == sky) or self.starsSky == sky) then
+        -- a marathon's hold has read this sky's stars in already (Screens.lua's Sky:BeginStarSwap).
+        -- (starsSky: the swap may be over already -- from ARAM it ends the tick it is switched --
+        -- and without it this went on to refill all eight frames off the card, a frame a tick on
+        -- the main thread: a console froze for six seconds and the twinkle stood still after.)
     elseif (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
         -- THE SAME EIGHT TEXTURES, REFILLED: every sky's star frames are one size and format, so
         -- the new sky's texels go into the buffers already here (Texture:ReloadFrom, one frame a
@@ -112,6 +125,7 @@ function Sky:LoadSky(sky)
         -- more at every change of stage cut the heap up until frames no longer fitted anywhere.
         self.starRefill = { sky = sky, next = 1 }
         self.starsHeld = false
+        Log.Warning("Sky: refilling sky " .. sky .. "'s stars from the card")
     else
         -- the first sky: load it
         self.starFrames, self.starAsked, self.starRefill = {}, {}, nil

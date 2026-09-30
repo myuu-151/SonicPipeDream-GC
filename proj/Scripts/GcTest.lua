@@ -19,6 +19,7 @@
 --     autoplay = true   the stage plays itself (the PC's S2_AUTOPLAY)
 --     spin = seconds    a spin dash that long into a stage, and every 8 s after (S2_TEST_SPIN)
 --     readout = true    fps, the worst frame, pieces drawn and free memory, on screen in a stage
+--     zoneSections = n  a marathon's zones n sections long (3 as played): changes of zone come often
 --     perf = true       the stage's parts timed one by one into the SD perf log's LUA lines
 --                       (Screens.lua TimeStageParts; needs a log build)
 

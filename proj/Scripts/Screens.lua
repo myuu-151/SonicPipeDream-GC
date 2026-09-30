@@ -91,7 +91,11 @@ function LoadStageData(n)
 end
 
 -- ------------------------------------------------------------------ the menus
-SKY_FRAME_BYTES = 64 * 1024
+SKY_FRAME_BYTES = 64 * 1024 + 64                -- a diamond frame's block: its texels and a header
+-- The vertex arrays of a stage's biggest pieces, the same in every palette (position and colour,
+-- 16 bytes a vertex): the drop and the rise 9776 vertices, the corners 4941, the drop's and rise's
+-- gloss 4644, the corners' gloss 2322. Two of each a stage.
+PIECE_ARRAY_BYTES = { 9776 * 16, 4941 * 16, 4644 * 16, 2322 * 16 }
 
 function Sky:ShowMenu()
     -- What every stage uses -- Sonic, the HUD's art, the rings, the bomb, the effects -- is loaded
@@ -101,8 +105,22 @@ function Sky:ShowMenu()
     -- of the churn that cut the heap up.
     -- The sky's diamond frames (512 x 256 CMPR: 64 KB and a header each) stream in and out all the
     -- time; their blocks are kept for them and never given back to the heap (System.PinBlocks), or
-    -- a busy marathon cut the heap up until, with 1.7 MB free, no frame could find 64 KB.
-    if (self.kept == nil and System.PinBlocks ~= nil) then System.PinBlocks(SKY_FRAME_BYTES) end
+    -- a busy marathon cut the heap up until, with 1.7 MB free, no frame could find 64 KB. And they
+    -- are RESERVED, taken now while the heap is in one piece: pinned only, a change of sky (the new
+    -- sky's frames asked for before the last sky's have gone) still had to find blocks in the heap,
+    -- and in a long marathon found none ("could not allocate 65600 bytes"). The same for the 32 KB
+    -- window every asset is read through (Stream.cpp): once none could be had, nothing loaded.
+    if (self.kept == nil and System.PinBlocks ~= nil) then
+        System.PinBlocks(SKY_FRAME_BYTES, 8, true)
+        System.PinBlocks(32 * 1024, 2, true)
+    end
+    -- The stage's biggest pieces' blocks, likewise: reserved now, while the heap is in one piece,
+    -- and kept between stages. Given back to the heap, the next stage's script and sky cut them up,
+    -- and three stages into a session a rise piece found no 156 KB anywhere: the loading screen
+    -- waited for it, and the stage then went down asking for it again.
+    if (self.kept == nil and System.PinBlocks ~= nil) then
+        for _, bytes in ipairs(PIECE_ARRAY_BYTES) do System.PinBlocks(bytes, 2, true) end
+    end
     -- The first time, at boot, this is most of the loading: the engine's loading screen is kept up
     -- for it, its bar carrying on (Renderer.ShowLoadingProgress). Without it the screen sat on the
     -- engine's last frame of it, the bar one step in, until the menu appeared.
@@ -260,17 +278,14 @@ function Sky:StartGoing(g)
     if (g.stage == "Marathon") then
         TheSpecialStage.onExit = function() self:BackToSelect(nil) end
         TheSpecialStage.onFinished = function() self:BackToSelect(nil) end
-        -- The recolour's staging buffers, taken NOW, behind the loading screen, and kept for the run
-        -- (StaticMesh:StageColorsFrom): taken mid-game, at a change of colours, they made the
-        -- picture flash with garbage for as long as they were held.
-        -- (every piece, not just the first zone's: a later zone may bring one in)
+        -- Every piece, not just the first zone's (a later zone may bring one in), and the pipe's
+        -- colours in all seven palettes (PipePalettes.lua, from native/make_pipe_palettes.py), for
+        -- the changes of colours: read NOW, behind the loading screen, and kept for the run.
         for _, piece in ipairs(MARATHON_PIECES) do
             TheSpecialStage:PieceMesh("SM_Piece_" .. piece .. "_P", g.palette)
             TheSpecialStage:PieceMesh("SM_Piece_" .. piece .. "_Gloss_P", g.palette)
         end
-        for full, mesh in pairs(TheSpecialStage.pieceMeshes or {}) do
-            if (mesh and mesh.StageColorsFrom ~= nil) then mesh:StageColorsFrom(full, 0, 0) end
-        end
+        if (PipePalettes == nil) then Script.Run("PipePalettes") end
     else
         TheSpecialStage.onExit = function() self:BackToSelect(nil) end
         TheSpecialStage.onFinished = function(won) self:BackToSelect(won) end
@@ -330,7 +345,11 @@ function Sky:TickGoing(deltaTime)
                 Want("SM_Piece_" .. piece .. "_P" .. g.palette)
                 Want("SM_Piece_" .. piece .. "_Gloss_P" .. g.palette)
             end
-            Want("SM_Emerald_" .. g.palette)              -- the first zone's item: its colours' emerald
+            -- Every colour's emerald, the first zone's first: each zone's item is its colours'
+            -- emerald, loaded now rather than as its zone joins (see SpecialStage:BuildMarathon,
+            -- which keeps them).
+            Want("SM_Emerald_" .. g.palette)
+            for n = 1, STAGES do Want("SM_Emerald_" .. n) end
             for i = 0, ARCH_RINGS - 1 do Want("SM_RingRainbow_" .. i) end
         else
             local data = _G["StageData" .. g.stage]
@@ -375,13 +394,18 @@ function Sky:TickGoing(deltaTime)
         -- The generator and its kit (read in this tick: the loading screen stands still for it),
         -- then the first zone, a slice a frame.
         if (MarathonGen == nil) then Script.Run("MarathonGen") end
+        -- (GcTest.zoneSections: shorter zones, so a test reaches a change of zone every few seconds)
+        if (GcTest ~= nil and GcTest.zoneSections ~= nil and MarathonKit ~= nil) then MarathonKit.design.sections_per_zone = GcTest.zoneSections end
         -- Yielding ten times as often as on the PC: a slice there is a few milliseconds' work, and
         -- here it took forty. And the collector kept close behind: a zone's building makes some
         -- 10 MB of short-lived tables, and left to Lua's usual pace that garbage filled the heap
-        -- until the engine's own allocations failed. (Lua 5.3 has no generational mode.)
+        -- until the engine's own allocations failed. (Lua 5.3 has no generational mode.) At 400
+        -- the collector still ran a megabyte behind: Lua's heap swung from 2.8 MB to 4 MB with each
+        -- zone built, and at the top of the swing the sky's frames and the asset reads found no
+        -- block. At 1000 it finishes a round in about a third of the allocating.
         MarathonGen.BREATH = MARATHON_BREATH
         collectgarbage("setpause", 110)
-        collectgarbage("setstepmul", 400)
+        collectgarbage("setstepmul", 1000)
         local seed = g.seed
         g.gen = coroutine.create(function() return MarathonGen.BuildZone(seed, 1) end)
         g.genClock, g.step = 0.0, 26
@@ -452,6 +476,7 @@ function Sky:TeardownStage()
     self.startedSpecialStage = false                -- so StartSpecialStage builds it afresh
     for k = 1, STAGES do _G["StageData" .. k] = nil end
     MarathonGen, MarathonKit, MarathonFirstZone, MarathonSeed = nil, nil, nil, nil
+    PipePalettes = nil
     collectgarbage("setpause", 200)                 -- Lua's own pace again (see TickGoing, step 25)
     collectgarbage("setstepmul", 200)
     Sweep()
@@ -500,17 +525,24 @@ end
 local STAR_ASK_AGAIN = 1.5          -- seconds
 function Sky:HoldStars(deltaTime)
     local w = self.starSwap
+    if (self.starRefill == nil and self.stash ~= nil) then self:StashStep(deltaTime) end
     if (w ~= nil) then
         -- A marathon's change of sky under way: the frames are being written, so the twinkle
         -- stays still (starsHeld false) until the last is in. (Left to the code below, it found
         -- all eight "loaded", held them again at once, and went on showing frames half written
-        -- -- the sky dome's texture torn mid-read flashed over the whole picture.)
+        -- -- the sky dome's texture torn mid-read flashed over the whole picture.) Stepped here,
+        -- every tick, whatever began it: all but the frame on show before the switch, that one
+        -- after it.
         if (w.switched) then
-            if (w.k <= #w.order) then self:StarSwapPiece(w) end
+            if (w.k <= #w.order) then self:StarSwapStep(w) end
             if (w.k > #w.order) then
+                Log.Warning(string.format("Sky: stars changed to sky %d, %d of 8 from ARAM", w.sky, w.fromStash or 0))
                 self.starSwap, self.starsHeld = nil, true
+                self.starsSky = w.sky                   -- (LoadSky: these stars need no refill)
                 self.frame = -1
             end
+        elseif (w.k <= w.before) then
+            self:StarSwapStep(w)
         end
         return
     end
@@ -521,6 +553,7 @@ function Sky:HoldStars(deltaTime)
             r.next = r.next + 1
             if (r.next > #self.starFrames) then
                 self.starRefill, self.starsHeld = nil, true
+                self.starsSky = r.sky
                 self.frame = -1                 -- the new stars go up on this tick
             end
         else
@@ -549,17 +582,88 @@ function Sky:HoldStars(deltaTime)
     end
     if (self.starWait >= STAR_ASK_AGAIN) then self.starWait = 0.0 end
     self.starsHeld = all
+    if (all) then self.starsSky = self.shownSky end
     if (all) then self.frame = -1 end           -- the new stars go up on this tick
+end
+
+-- ------------------------------------------------------------------ the next sky, stashed in ARAM
+-- A marathon's next sky is known a whole zone ahead (its zone is built while the one before is
+-- played). Its eight star frames are read then, in the background, into ARAM -- 16 MB beside the
+-- main memory, where the sounds live -- each into its own frame's stash (Texture:StashFrom), a
+-- frame at a time while no change of sky is under way. At the hold they come in from there in a
+-- few milliseconds each (Sky:StarSwapStep), and the sky changes WITH the pipe, on the emerald. Read
+-- from the SD card at the hold instead, 4 MB took the card twenty seconds and more, while the
+-- twinkle stood still and the change of zone waited for it.
+-- NOTHING HERE READS THE CARD, NOT EVEN A HEADER: the reader thread finds each file's texels
+-- itself. (It did read each frame's header here, and waiting behind the background reads that was
+-- a 70-160 ms stutter eight times a zone.) Warnings, so that a console's SD log shows them.
+function Sky:StashSky(sky)
+    if (self.starFrames == nil or self.starFrames[8] == nil or self.starFrames[1].StashFrom == nil) then return end
+    local st = self.stash
+    if (st ~= nil and st.sky == sky) then return end
+    -- ONE STASH AT A TIME: one still waiting to go up (its hold not come, or its stars late) is
+    -- not written over; the next begins once it is up (StashStep)
+    if (st ~= nil and not st.failed and (st.k <= 8 or self.shownSky ~= st.sky or self.starSwap ~= nil)) then
+        self.stashNext = sky
+        return
+    end
+    self.stash, self.stashNext = { sky = sky, k = 1, tries = 0, took = 0.0 }, nil
+    Log.Warning("Sky: stashing sky " .. sky .. "'s stars in ARAM")
+end
+
+-- True while the stars of `sky` are still being stashed: the change of sky waits for them, the
+-- twinkle carrying on meanwhile, rather than reading them off the card at the hold.
+function Sky:StashPending(sky)
+    local st = self.stash
+    return st ~= nil and st.sky == sky and st.k <= 8 and not st.failed
+end
+
+function Sky:StashStep(deltaTime)
+    local st = self.stash
+    if (st.k > 8 or st.failed) then
+        -- this one up (or given up on): the next zone's, if it is waiting
+        if (self.stashNext ~= nil and (st.failed or (self.shownSky == st.sky and self.starSwap == nil))) then
+            local sky = self.stashNext
+            self.stash, self.stashNext = nil, nil
+            self:StashSky(sky)
+        end
+        return
+    end
+    st.took = st.took + deltaTime
+    local frame, name = self.starFrames[st.k], self.starName(st.sky, st.k)
+    if (frame:IsStashed(name)) then
+        st.k, st.asked, st.tries = st.k + 1, false, 0
+        if (st.k > 8) then
+            Log.Warning(string.format("Sky: sky %d's stars stashed in %.1f s", st.sky, st.took))
+        end
+        return
+    end
+    if (frame:IsStashing()) then return end
+    if (st.asked) then
+        -- read and not in: the read failed. Once more, then the sky changes the ordinary way.
+        st.tries = st.tries + 1
+        if (st.tries > 2) then
+            st.failed = true
+            Log.Warning("Sky: stashing " .. name .. " failed")
+            return
+        end
+    end
+    if (frame:StashFrom(name)) then
+        st.asked = true
+    elseif (not frame:IsStashing()) then
+        st.failed = true                    -- no ARAM, or the queue is full: the ordinary way
+        Log.Warning("Sky: " .. name .. " could not be stashed")
+    end
 end
 
 -- ------------------------------------------------------------------ a marathon's change of sky
 -- The hold between two zones changes the sky, and not behind a loading screen: Sonic runs on.
 -- The eight star frames (which carry the sky's colours too) are refilled in place, as a change of
--- stage does, but A PIECE AT A TIME (Texture:ReloadPart) through the hold, not a frame a tick --
--- 512 KB read in one go stops the game for a moment. The twinkle holds still meanwhile, on the
--- frame it was showing, which is refilled last: all the others first, then at the switch (the pipe
--- recoloured in the same frame, see SpecialStage:ApplyRecolour) a refilled one goes up, and the
--- last one is read in behind it.
+-- stage does, but BY A BACKGROUND THREAD (Texture:ReloadFromAsync), a frame at a time: 4 MB off
+-- the console's SD card, read on this thread a piece a frame, held a marathon's change of zone at
+-- 7 frames a second for half a minute. The twinkle holds still meanwhile, on the frame it was
+-- showing, which is refilled last: all the others first, then at the switch (SpecialStage's
+-- TickFade) a refilled one goes up, and the last one is read in behind it.
 local STAR_PIECE = 32 * 1024
 
 function Sky:BeginStarSwap(sky)
@@ -575,28 +679,48 @@ function Sky:BeginStarSwap(sky)
     end
     order[#order + 1] = shown
     self.starSwap = { sky = sky, order = order, k = 1, at = 0, before = 7 }
+    self.starsSky = nil                         -- some of each sky until it is done
     self.starsHeld = false                      -- the twinkle holds still (Sky:StarFrame)
 end
 
-function Sky:StarSwapPiece(w)
+-- One step of the swap: the next frame's read started, or the one being read found done. (An
+-- engine without background reads refills a piece at a time here, as before.)
+function Sky:StarSwapStep(w)
     local i = w.order[w.k]
-    local nextAt, total = self.starFrames[i]:ReloadPart(self.starName(w.sky, i), w.at, STAR_PIECE)
-    if (nextAt < 0) then
-        Log.Warning("Sky: star frame " .. i .. " not refilled")
+    local frame = self.starFrames[i]
+    if (not w.reading and frame.IsStashed ~= nil and frame:IsStashed(self.starName(w.sky, i))) then
+        -- read into ARAM while the last zone was played (Sky:StashSky): in, in a few milliseconds
+        frame:ReloadFromStash()
+        w.fromStash = (w.fromStash or 0) + 1
         w.k, w.at = w.k + 1, 0
-    elseif (nextAt >= total) then
+    elseif (w.reading) then
+        if (frame:IsReloading()) then return end
+        w.reading = false
         w.k, w.at = w.k + 1, 0
+    elseif (frame.ReloadFromAsync ~= nil) then
+        if (frame:ReloadFromAsync(self.starName(w.sky, i))) then
+            w.reading = true
+        else
+            Log.Warning("Sky: star frame " .. i .. " not refilled")
+            w.k, w.at = w.k + 1, 0
+        end
     else
-        w.at = nextAt
+        local nextAt, total = frame:ReloadPart(self.starName(w.sky, i), w.at, STAR_PIECE)
+        if (nextAt < 0) then
+            Log.Warning("Sky: star frame " .. i .. " not refilled")
+            w.k, w.at = w.k + 1, 0
+        elseif (nextAt >= total) then
+            w.k, w.at = w.k + 1, 0
+        else
+            w.at = nextAt
+        end
     end
 end
 
--- One piece; true once every frame but the one on show holds the new sky.
+-- True once every frame but the one on show holds the new sky (Sky:HoldStars reads them in).
 function Sky:StepStarSwap()
     local w = self.starSwap
-    if (w == nil or w.switched) then return true end
-    if (w.k <= w.before) then self:StarSwapPiece(w) end
-    return w.k > w.before
+    return w == nil or w.switched or w.k > w.before
 end
 
 -- The switch: a refilled frame up at once. The stage sets `sky` after this; LoadSky then leaves
@@ -609,7 +733,8 @@ function Sky:SwitchStars()
 end
 
 -- Left part way (the run ended in the hold): the frames are some of each sky, so all eight are
--- read again for the sky that is up, the ordinary way.
+-- read again for the sky that is up, the ordinary way. (A frame still being read in the
+-- background is finished first by the engine, before anything else reads into it.)
 function Sky:CancelStarSwap()
     local w = self.starSwap
     if (w == nil) then return end

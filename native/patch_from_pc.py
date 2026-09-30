@@ -69,6 +69,7 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
 """, """    for _, p in ipairs(self.pieceNodes or {}) do p.node:Destruct() end
     self.pieceNodes = {}
     self.pieceMeshes = {}
+    self.emeraldMeshes = nil                    -- (a marathon's: see BuildMarathon)
 """),
     # -- the readout goes and comes back with the stage (in Leave, then in Enter)
     ("{ self.player, self.playerShadow, self.uiNode }",
@@ -150,9 +151,10 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     # meshes (SM_Piece_Drop_P3 for _P5), all seven palettes loaded as they come. Here two sets do not
     # fit (2.8 MB each), and loading and freeing them each zone cut the heap up. The palettes are the
     # same meshes painted differently, so here the meshes the run started with stay, and a change of
-    # colours RECOLOURS them in place (engine: StaticMesh:StageColorsFrom). The new colours, and the
-    # new sky's stars (Screens.lua's Sky:BeginStarSwap), are read in a little at a time through the
-    # hold, then put up at once.
+    # colours RECOLOURS them in place, from a table of the pipe's colours in all seven palettes
+    # (PipePalettes.lua, native/make_pipe_palettes.py; engine: StaticMesh:SetPaletteColors) -- at
+    # once, with nothing read off the disc. The new sky's stars are read in by a background thread
+    # (Screens.lua's Sky:BeginStarSwap) and go up when they are in.
     ("""    local full = name .. palette
 """, """    local full = name .. (self.meshPalette or palette)  -- GAMECUBE: the meshes the stage began with
 """),
@@ -167,63 +169,71 @@ local SEE_AHEAD, SEE_BEHIND = 72, 6 """),
     if (TheSky ~= nil) then TheSky.sky = self.data.palette_skies[n] end
 end
 """, """function SpecialStage:SetPalette(n)
-    -- GAMECUBE: at once, all of it read now (the hold spreads it out instead: see TickFade)
+    -- GAMECUBE: the pipe at once, from the palettes' table; the sky the ordinary way
     if (n == self.palette or self.pieceMeshes == nil) then return end
-    local job = self:RecolourJob(n)
-    while (not self:StepRecolour(job)) do end
-    self:ApplyRecolour(job)
+    self:RecolourPipe(n)
+    if (TheSky ~= nil) then TheSky.sky = self.data.palette_skies[n] end
 end
 
--- GAMECUBE: a change of colours, as a job: every piece mesh's new colours, and the new sky's stars.
-local RECOLOUR_MS = 5               -- milliseconds of reading a frame, through the hold
-local RECOLOUR_PIECE = 744          -- vertices a read: 32 KB of the file
-
-local function NowMs()
-    if (System.GetClockMs ~= nil) then return System.GetClockMs() end
-    return nil
-end
-
-function SpecialStage:RecolourJob(n)
-    local job = { to = n, meshes = {}, i = 1, at = 0 }
+-- GAMECUBE: the pipe in palette n, every piece mesh recoloured in place from the palettes' table
+-- (PipePalettes.lua, read with the run: Screens.lua). It was the new palette's meshes read off the
+-- disc for their colours, ~2 MB, and on a console's SD card a change of zone crawled for half a
+-- minute at 7 frames a second.
+function SpecialStage:RecolourPipe(n)
+    if (PipePalettes == nil) then Script.Run("PipePalettes") end
+    self.palette = n
+    if (PipePalettes == nil or PipePalettes.index == nil) then
+        Log.Warning("SpecialStage: no PipePalettes; the pipe keeps its colours")
+        return
+    end
     local own = tostring(self.meshPalette)
     for full, mesh in pairs(self.pieceMeshes) do
-        if (mesh) then
-            job.meshes[#job.meshes + 1] = { mesh = mesh, from = full:sub(1, #full - #own) .. n }
+        -- SM_Piece_Drop_P3 is SM_Piece_Drop in the table
+        local index = mesh and PipePalettes.index[full:sub(1, #full - #own - 2)]
+        if (index == nil or not mesh:SetPaletteColors(index, PipePalettes.table, PipePalettes.palettes, n)) then
+            Log.Warning("SpecialStage: no palette " .. n .. " colours for " .. full)
         end
     end
-    table.sort(job.meshes, function(a, b) return a.from < b.from end)
-    if (TheSky ~= nil and TheSky.BeginStarSwap ~= nil) then TheSky:BeginStarSwap(self.data.palette_skies[n]) end
-    return job
 end
 
--- A slice of the job; true once all of it is read.
+-- GAMECUBE: a change of colours, as a job: the new sky's star frames, read in by a background
+-- thread (Screens.lua's Sky:BeginStarSwap).
+function SpecialStage:RecolourJob(n)
+    return { to = n, sky = self.data.palette_skies[n] }
+end
+
+-- True once the new sky's frames are in (all but the one on show: see Sky:StepStarSwap). ONE
+-- CHANGE OF SKY AT A TIME: an earlier zone's may still be reading (the card is slow), and one
+-- begun over it found its frames half the one sky, half the other, and the sky reloaded all eight
+-- afresh (4 MB) under it. So an earlier one is let finish -- put up now, if its frames are in and
+-- its own hold is gone -- and this one begins after.
 function SpecialStage:StepRecolour(job)
-    local t0 = NowMs()
-    repeat
-        local m = job.meshes[job.i]
-        if (m ~= nil) then
-            local nextAt, total = m.mesh:StageColorsFrom(m.from, job.at, RECOLOUR_PIECE)
-            if (nextAt < 0) then
-                Log.Warning("SpecialStage: no colours from " .. m.from)
-                job.i, job.at = job.i + 1, 0
-            elseif (nextAt >= total) then
-                job.i, job.at = job.i + 1, 0
-            else
-                job.at = nextAt
+    if (TheSky == nil or TheSky.BeginStarSwap == nil) then return true end
+    if (job.swap == nil) then
+        local w = TheSky.starSwap
+        if (w ~= nil) then
+            if (not w.switched and TheSky:StepStarSwap()) then
+                TheSky:SwitchStars()
+                TheSky.sky = w.sky
             end
-        elseif (TheSky == nil or TheSky.StepStarSwap == nil or TheSky:StepStarSwap()) then
-            return true
+            return false
         end
-    until (t0 == nil or NowMs() - t0 >= RECOLOUR_MS)
-    return false
+        -- its stars still being stashed in ARAM: wait for them (the twinkle carries on)
+        if (TheSky.StashPending ~= nil and TheSky:StashPending(job.sky)) then return false end
+        TheSky:BeginStarSwap(job.sky)
+        job.swap = TheSky.starSwap or false         -- (false: nothing to read -- the same sky)
+    end
+    return TheSky:StepStarSwap()
 end
 
-function SpecialStage:ApplyRecolour(job)
-    for _, m in ipairs(job.meshes) do m.mesh:ApplyStagedColors() end
-    self.palette = job.to
-    if (TheSky ~= nil) then
-        if (TheSky.SwitchStars ~= nil) then TheSky:SwitchStars() end
-        TheSky.sky = self.data.palette_skies[job.to]
+-- Only a sky whose stars were read in goes up. The sky's other way to change (LoadSky: all eight
+-- frames loaded afresh, 4 MB at once) is for behind a loading screen; in the middle of a run on a
+-- console it ran the memory out, and the stage's own script failing for want of it stopped the game.
+-- A change that could not be read (a frame of the stars never arrived) leaves the sky as it is.
+function SpecialStage:SwitchSky(job)
+    if (TheSky ~= nil and job.swap) then
+        TheSky:SwitchStars()
+        TheSky.sky = job.sky
     end
 end
 """),
@@ -244,14 +254,24 @@ end
     local h = self.holding
     if (h == nil) then return end
     h.clock = h.clock + dt
-    -- GAMECUBE: read from the moment the hold begins; switched once read and SWITCH_AT is reached
-    if (h.to == self.palette) then
-        self.holding = nil
-        return
+    -- GAMECUBE: the pipe changes ON THE EMERALD (SWITCH_AT), whatever the sky is doing; the sky
+    -- with it when its stars are in, which they are when they were stashed in ARAM during the zone
+    -- (Screens.lua's Sky:StashSky), and a moment later when they have to be read now. (Waiting for
+    -- the sky before changing the pipe held the whole change of zone for twenty seconds of SD card.)
+    if (h.job == nil) then
+        if (h.to == self.palette) then
+            self.holding = nil
+            return
+        end
+        h.job = self:RecolourJob(h.to)
     end
-    if (h.job == nil) then h.job = self:RecolourJob(h.to) end
-    if (self:StepRecolour(h.job) and h.clock >= SWITCH_AT) then
-        self:ApplyRecolour(h.job)
+    local ready = self:StepRecolour(h.job)
+    if (h.clock >= SWITCH_AT and not h.piped) then
+        self:RecolourPipe(h.to)
+        h.piped = true
+    end
+    if (ready and h.piped) then
+        self:SwitchSky(h.job)
         self.holding = nil
     end
 end
@@ -264,11 +284,131 @@ function SpecialStage:EndFade()
     self.holding = nil
 end
 """),
+    # -- a zone joined: its sky's stars stashed in ARAM while the zone before it is played
+    ("""    self.zonesBuilt = self.zonesBuilt + 1
+    print(string.format("MARATHON zone %d joined""", """    self.zonesBuilt = self.zonesBuilt + 1
+    -- GAMECUBE: its sky's stars read into ARAM now, while the zone before it is played, so they are
+    -- in at its hold (Screens.lua's Sky:StashSky)
+    local nextSky = data.palette_skies[data.sections[s0 + 1].palette]
+    if (TheSky ~= nil and TheSky.StashSky ~= nil and nextSky ~= nil) then TheSky:StashSky(nextSky) end
+    print(string.format("MARATHON zone %d joined"""),
+    # -- A ZONE IS JOINED A SLICE A FRAME, as it is built. Joined in one go it was a third of a second
+    # in one frame -- its ~3000 frames of centre line turned into place, a table or more each, and
+    # every piece spawned -- and the frame after it moved Sonic a third of a second at once: he
+    # lurched forward as the hold handed him back. Run in the generator's coroutine, the join
+    # yields every so often and TickMarathonGen gives it the same few milliseconds a frame. (Zone 1
+    # is joined outside any coroutine, behind the loading screen, and so in one go as before.)
+    ("""        if (coroutine.status(self.gen) == "dead") then
+            self.gen = nil
+            if (zone ~= nil) then
+                self:AppendZone(zone)
+            else
+                self.genError = "zone " .. (self.zonesBuilt + 1) .. " could not be built"
+            end
+            return
+        end""", """        if (coroutine.status(self.gen) == "dead") then
+            self.gen = nil
+            if (self.appending) then
+                self.appending = nil                -- joined
+            elseif (zone ~= nil) then
+                self.appending = true               -- GAMECUBE: joined a slice a frame, from the next
+                self.gen = coroutine.create(function() self:AppendZone(zone) end)
+            else
+                self.genError = "zone " .. (self.zonesBuilt + 1) .. " could not be built"
+            end
+            return
+        end"""),
+    ("""    self.zonesBuilt = 1
+    self.gen = nil
+""", """    self.zonesBuilt = 1
+    self.gen = nil
+    self.appending = nil
+"""),
+    ("""            data.path[#data.path + 1] = e
+        end
+    end
+    for _, sec in ipairs(zone.sections) do""", """            data.path[#data.path + 1] = e
+        end
+        if (i % 128 == 0 and coroutine.isyieldable()) then coroutine.yield() end   -- GAMECUBE: a slice a frame
+    end
+    for _, sec in ipairs(zone.sections) do"""),
+    ("""        end
+    end
+    for s = s0 + 1, #data.sections do""", """        end
+        if (i % 4 == 0 and coroutine.isyieldable()) then coroutine.yield() end     -- GAMECUBE: a slice a frame
+    end
+    for s = s0 + 1, #data.sections do"""),
+    ("""        self:SpawnArch(s)
+""", """        self:SpawnArch(s)
+        if (coroutine.isyieldable()) then coroutine.yield() end                    -- GAMECUBE: a slice a frame
+"""),
+    # -- THE RUN'S CENTRE LINE HOLDS ONLY WHAT IS NEAR HIM AND AHEAD. The PC's keeps every frame of
+    # the run in one table, a slot a frame, for as long as the run goes on; past 8192 frames (the
+    # fourth zone or so) Lua wanted that table's slots in one 128 KB block, which a console's heap, in
+    # pieces by then, did not have. The next zone could not be joined, was built again, failed again,
+    # every second and a half ("not enough memory"), and the run stopped at the end of its track.
+    # So the frames passed are taken out and the rest moved down: data.pathBase is the first frame
+    # the table holds, and the frames asked for are counted from it.
+    ("""
+    local f = math.max(0.0, math.min(frame, #path - 1.001))
+""", """
+    local f = math.max(0.0, math.min(frame - (self.data.pathBase or 0), #path - 1.001))    -- GAMECUBE: see TrimBehind
+"""),
+    ("""
+        local f = math.max(0.0, math.min(frame, #path - 1.001))
+""", """
+        local f = math.max(0.0, math.min(frame - (self.data.pathBase or 0), #path - 1.001))    -- GAMECUBE: see TrimBehind
+"""),
+    ("""    local want = math.ceil(self.frame + seconds * SPEED) + 16 - (#path - 1)
+""", """    local want = math.ceil(self.frame + seconds * SPEED) + 16 - (#path - 1 + (data.pathBase or 0))   -- GAMECUBE: see TrimBehind
+"""),
+    ("""    -- and the run's own table: the centre line and the rings of what is long gone (a zone's path
+    -- is a table a frame, and a run can go on for as long as the player does). The frames gone all
+    -- share the oldest one kept -- not nil, which would leave #path, and so the next zone's join,
+    -- to chance.
+    local data = self.data
+    local upTo = math.min(math.floor(limit) - 100, #data.path - 1)
+    if (upTo > (self.trimmedTo or 0)) then
+        local oldest = data.path[upTo + 1]
+        for f = (self.trimmedTo or 0) + 1, upTo do data.path[f] = oldest end
+        self.trimmedTo = upTo
+    end
+""", """    -- and the run's own table: the centre line and the rings of what is long gone (a zone's path
+    -- is a table a frame, and a run can go on for as long as the player does). GAMECUBE: the
+    -- frames gone are TAKEN OUT, and the rest moved down to the start of the table, which so
+    -- never holds more than two zones or so (a table a frame of the whole run wanted, past 8192
+    -- frames, one 128 KB block the heap did not have). data.pathBase: the frame it starts at.
+    local data = self.data
+    local path, base = data.path, data.pathBase or 0
+    local drop = math.min(math.floor(limit) - 100, base + #path - 1) - base
+    if (drop > 0) then
+        local n = #path
+        table.move(path, drop + 1, n, 1)
+        for i = n - drop + 1, n do path[i] = nil end
+        data.pathBase = base + drop
+    end
+    -- and the pieces' places, of pieces long gone: nothing reads them after a piece is laid, and
+    -- they were some 50 KB a zone, for good
+    local pieces, gone = data.pieces, 0
+    while (gone < #pieces - 1 and pieces[gone + 1].last_frame < limit - 100) do gone = gone + 1 end
+    if (gone > 0) then
+        local n = #pieces
+        table.move(pieces, gone + 1, n, 1)
+        for i = n - gone + 1, n do pieces[i] = nil end
+    end
+"""),
     # -- the first zone, and the run's seed, come from the loading screen (Screens.lua), which built
     # the zone while it was up; and the generator is let go of after a run (Script.Run, not Require)
     ("""    Script.Require("MarathonGen")
     local kit = MarathonKit
 """, """    if (MarathonGen == nil) then Script.Run("MarathonGen") end     -- GAMECUBE: freed after a run
+    -- GAMECUBE: every colour's emerald (each zone's item), loaded behind the loading screen (the
+    -- marathon's list in Screens.lua) and held here for the run: loaded as its zone joined, it was
+    -- a load off the disc in the middle of the run, a hitch, just as the heap is at its fullest.
+    self.emeraldMeshes = self.emeraldMeshes or {}
+    for n = 1, LAST_STAGE do
+        self.emeraldMeshes[n] = self.emeraldMeshes[n] or LoadAsset("SM_Emerald_" .. n)
+    end
     local kit = MarathonKit
 """),
     ("""    seed = math.floor(seed % 2147483647)
@@ -354,10 +494,23 @@ Script.Require("Screens")       -- GAMECUBE: the menus, the loading screen, the 
     for i = 1, STAR_FRAMES do
         self.starFrames[i] = LoadAsset(StarName(sky, i))
     end
-""", """    self.window = {}
+""", """    -- The last sky's diamond frames let go of NOW (Asset:Release, then the sweep), not left in a
+    -- dropped table until Lua's collector came round: that kept up to six 64 KB frames while the
+    -- new sky's loaded on top of them. (The one on show is the material's until a new one goes up.)
+    for _, w in pairs(self.window or {}) do
+        if (w.asked ~= nil and w.asked.Release ~= nil) then
+            w.asked:Release()
+            if (w.tex ~= nil) then w.tex:Release() end
+        end
+    end
+    self.window = {}
+    RefSweep()
     self.medleyShown = nil          -- none of its diamond frames yet: the last sky's is not shown again
-    if (self.starSwap ~= nil and self.starSwap.switched and self.starSwap.sky == sky) then
-        -- a marathon's hold has read this sky's stars in already (Screens.lua's Sky:BeginStarSwap)
+    if ((self.starSwap ~= nil and self.starSwap.switched and self.starSwap.sky == sky) or self.starsSky == sky) then
+        -- a marathon's hold has read this sky's stars in already (Screens.lua's Sky:BeginStarSwap).
+        -- (starsSky: the swap may be over already -- from ARAM it ends the tick it is switched --
+        -- and without it this went on to refill all eight frames off the card, a frame a tick on
+        -- the main thread: a console froze for six seconds and the twinkle stood still after.)
     elseif (self.starsHeld and self.starFrames[STAR_FRAMES] ~= nil and self.starFrames[1].ReloadFrom ~= nil) then
         -- THE SAME EIGHT TEXTURES, REFILLED: every sky's star frames are one size and format, so
         -- the new sky's texels go into the buffers already here (Texture:ReloadFrom, one frame a
@@ -365,6 +518,7 @@ Script.Require("Screens")       -- GAMECUBE: the menus, the loading screen, the 
         -- more at every change of stage cut the heap up until frames no longer fitted anywhere.
         self.starRefill = { sky = sky, next = 1 }
         self.starsHeld = false
+        Log.Warning("Sky: refilling sky " .. sky .. "'s stars from the card")
     else
         -- the first sky: load it
         self.starFrames, self.starAsked, self.starRefill = {}, {}, nil

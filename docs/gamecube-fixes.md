@@ -110,6 +110,15 @@ and carry on (the loading screen waits up to 30 seconds for anything that never 
   without telling the handles waiting on it: they waited for ever, and the loading screen with
   them. It now hands them the loaded asset and frees its duplicate (engine 3f75d15d).
 
+## The marathon's stripes (2026-09-30)
+
+At a marathon's change of zone, every 3D object turned into stripes running to a single point, and
+the game went down; the HUD stayed perfect. The cause was libogc's `guMtxConcat` (3.0.4): a
+`psq_l` in `ps_guMtxConcat` carries a 16-bit small-data relocation in a 12-bit field, so the
+routine's "0" was read from whatever sat 608 bytes past r13 -- here, inside the buffer the
+recolour reads vertex data into. The engine now calls `c_guMtxConcat` (`GxUtils.h`). The whole
+hunt, dead ends included, is in [session-2026-09-30.md](session-2026-09-30.md).
+
 ## Frame rate on hardware (2026-09-24)
 
 About 28 fps with stutter at first; 55-60 fps after, measured each step from the SD perf log
