@@ -602,6 +602,9 @@ end"""),
 """, """                             { label = "TIME", setting = "time" },
                              { label = "RINGS FOR +1 SECOND", setting = "ringsPerSecond" },     -- GAMECUBE
 """),
+        # the spin dash is on L here (SpecialStage.lua's SpinHeld)
+        ("""{ label = "SPIN DASH", info = "HOLD R, A TO REV" }""",
+         """{ label = "SPIN DASH", info = "HOLD L, A TO REV" }"""),
     ],        # OPTIONS on the title menu            # the menus' music: Screens.lua ticks it under its loading screen too
     # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
     # clear of the edges.

@@ -171,6 +171,19 @@ def intro():
     if os.path.isdir(dst):
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
+    # The title's clouds as RGB5A3 (16 bits a texel, 3 of alpha), full size, no mipmaps: as RGBA8 they
+    # were 1 MB in one block and, when B on the menu brought the title back, often found no room (the
+    # heap cut up by the menus and stages by then): the sky came up without them. With mipmaps the
+    # packager would choose RGB5A3 by itself, but the mipmaps blurred the clouds. So the texture is
+    # marked here: its format RGBA5551 and forced high quality, which the packager cooks as it is.
+    # (Its texels stay RGBA8 in the file, as every texture's do; the format is what it is cooked to.)
+    clouds = os.path.join(dst, "T_DayClouds.oct")
+    d = bytearray(open(clouds, "rb").read())
+    body = 25 + struct.unpack_from("<I", d, 21)[0]
+    struct.pack_into("<I", d, body + 16, 4)           # PixelFormat::RGBA5551
+    d[body + 28] = 0                                  # no mipmaps
+    d[body + 31] = 1                                  # forced high quality: cooked in its own format
+    open(clouds, "wb").write(bytes(d))
     size = sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
     print("Intro: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
 
