@@ -139,17 +139,18 @@ function Sky:ShowMenu()
     -- RESERVED at boot as well, taken for good before anything else: 590 KB held all session, with
     -- the read windows', left a stage's data -- up to 200 KB of script, read and compiled in big
     -- pieces -- nowhere to go after a few stages, and every stage after that loaded as stage 1.)
-    if (self.kept == nil and System.PinBlocks ~= nil) then System.PinBlocks(SKY_FRAME_BYTES) end
+    if (not self.pinned and System.PinBlocks ~= nil) then System.PinBlocks(SKY_FRAME_BYTES) end
     -- The stage's biggest pieces' blocks, likewise: reserved now, while the heap is in one piece,
     -- and kept between stages. Given back to the heap, the next stage's script and sky cut them up,
     -- and three stages into a session a rise piece found no 156 KB anywhere: the loading screen
     -- waited for it, and the stage then went down asking for it again.
-    if (self.kept == nil and System.PinBlocks ~= nil) then
+    if (not self.pinned and System.PinBlocks ~= nil) then
         for _, bytes in ipairs(PIECE_ARRAY_BYTES) do System.PinBlocks(bytes, 2, true) end
     end
     -- The first time, at boot, this is most of the loading: the engine's loading screen is kept up
     -- for it, its bar carrying on (Renderer.ShowLoadingProgress). Without it the screen sat on the
     -- engine's last frame of it, the bar one step in, until the menu appeared.
+    self.pinned = true                          -- (once: back at the title and out again, they stay)
     local boot = (self.kept == nil and Renderer.ShowLoadingProgress ~= nil)
     if (boot) then Renderer.ShowLoadingProgress(true) end
     self.kept = {}
@@ -1020,14 +1021,35 @@ function Sky:Tick(deltaTime)
     local loading = (self.going ~= nil and (self.going.step < 3 or self.going.step >= 25)) or self.returning ~= nil
     if (not loading) then pcTick(self, deltaTime) end
     if (loading and MenuMusic ~= nil) then MenuMusic.Tick(deltaTime) end   -- (pcTick ticks it otherwise)
+    -- GcTest.titleAgain = seconds: on the title menu that long, B is pressed (once): back to the title
+    if (GcTest ~= nil and GcTest.titleAgain ~= nil and not self.titleAgainDone and TheMenu ~= nil
+            and TheMenu.built and TheMenu.open) then
+        self.titleAgainIn = (self.titleAgainIn or GcTest.titleAgain) - deltaTime
+        if (self.titleAgainIn <= 0.0) then
+            self.titleAgainDone = true
+            Log.Warning("GcTest: B on the title menu")
+            if (TheMenu.onBack ~= nil) then TheMenu.onBack() end
+        end
+    end
     -- GcTest.introAuto = seconds: the title screen goes on to the menus by itself (no pad in a test)
     if (GcTest ~= nil and GcTest.introAuto ~= nil and TheIntro ~= nil and not TheIntro.done
             and (TheIntro.clock or 0.0) >= GcTest.introAuto) then
         TheIntro:Finish()
     end
-    if (self.gcTitleAgain) then                   -- B on the title menu: the menus go, the title comes
+    -- B on the title menu: back to the title AS AT BOOT. The title does not fit beside what the
+    -- menus keep loaded for the stages (the log: "out of memory" partway through Sonic's frames,
+    -- then a crash), so the menus and the stage's shares are let go of, and swept a tick later
+    -- (once the engine has finished the menus' Destructs), before the title loads. START there
+    -- loads them all again behind the loading screen, as at boot (ShowMenu, kept nil). The sky's
+    -- stars stay: they are at the bottom of the heap, out of the way.
+    if (self.gcTitleAgain) then
         self.gcTitleAgain = false
         self:DropMenus()
+        self.kept = nil
+        self.titleClearing = true
+    elseif (self.titleClearing) then
+        self.titleClearing = false
+        Sweep()
         self.introPhase = "on"
         self.introNode = self:GetWorld():SpawnNode("Canvas")
         self.introNode:SetName("Intro")

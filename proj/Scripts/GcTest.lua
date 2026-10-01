@@ -26,5 +26,6 @@
 --                       (Screens.lua TimeStageParts; needs a log build)
 
 --     introAuto = seconds  the title screen goes on to the menus by itself after that long
+--     titleAgain = seconds  on the title menu that long, B is pressed once: back to the title
 
 GcTest = {}
