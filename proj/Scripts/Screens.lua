@@ -123,6 +123,7 @@ function Sky:ShowMenu()
         self.introNode:SetScript("Intro")
         if (TheIntro ~= nil) then
             TheIntro.onDone = function() self.introPhase = "ending" end
+            Intro.waitFor = function() return self:StarsReady() end     -- see UpdateSky below
             return
         end
     end
@@ -190,6 +191,9 @@ function Sky:SpawnMenus(selectAt)
         TheStageSelect:Close()
         TheMenu:Open()
     end
+    -- B on the title menu: back to the title screen. Not now (this is the menu's own Tick): the
+    -- menus go and the title comes up on Sky:Tick, and START there builds the menus again.
+    TheMenu.onBack = function() self.gcTitleAgain = true end
     TheMenu.onChoose = function(key)
         if (key == "main_game") then
             TheMenu:Close()
@@ -993,21 +997,67 @@ function Sky:TestFree()
     self.freeNode:Attach(self:GetWorld():GetRootNode(), false)
 end
 
+-- THE SKY'S STARS COME FIRST, BEFORE THE TITLE SCREEN. They are eight 512 KB frames, each wanting a
+-- block of its own. Loaded beside the title's 6 MB, or after it into the holes it left, one or two
+-- found no room (the log: "could not allocate 524352 bytes"), and the menu's sky then flickered
+-- between its frames and black. So at boot the title waits (Intro.waitFor) until the stars are in,
+-- at the bottom of the heap where nothing moves them; then the sky stands still -- hidden behind
+-- the title's own, its diamond show streaming nothing -- until the title has gone and been swept.
+local pcUpdateSky = Sky.UpdateSky
+function Sky:UpdateSky(deltaTime)
+    if (self.introPhase ~= nil and self.introPhase ~= "done" and self:StarsReady()) then return end
+    pcUpdateSky(self, deltaTime)
+end
+
 local pcTick = Sky.Tick
 function Sky:Tick(deltaTime)
-    self:HoldStars(deltaTime)                   -- first: see HoldStars
+    if (self.introPhase == nil or self.introPhase == "done" or not self:StarsReady()) then
+        self:HoldStars(deltaTime)               -- first: see HoldStars
+    end
     -- The sky stands still under the loading screen (it cannot be seen): its diamond show
     -- streams frames in and out all the time, and in the middle of a load those small blocks
     -- were cutting up the big holes the stage's pieces and the new stars need.
     local loading = (self.going ~= nil and (self.going.step < 3 or self.going.step >= 25)) or self.returning ~= nil
     if (not loading) then pcTick(self, deltaTime) end
     if (loading and MenuMusic ~= nil) then MenuMusic.Tick(deltaTime) end   -- (pcTick ticks it otherwise)
-    if (self.introPhase == "ending") then       -- the title screen done with (see ShowMenu)
-        self.introPhase = "done"
-        self.introNode:Destruct()
+    -- GcTest.introAuto = seconds: the title screen goes on to the menus by itself (no pad in a test)
+    if (GcTest ~= nil and GcTest.introAuto ~= nil and TheIntro ~= nil and not TheIntro.done
+            and (TheIntro.clock or 0.0) >= GcTest.introAuto) then
+        TheIntro:Finish()
+    end
+    if (self.gcTitleAgain) then                   -- B on the title menu: the menus go, the title comes
+        self.gcTitleAgain = false
+        self:DropMenus()
+        self.introPhase = "on"
+        self.introNode = self:GetWorld():SpawnNode("Canvas")
+        self.introNode:SetName("Intro")
+        self.introNode:SetScript("Intro")
+        if (TheIntro ~= nil) then
+            TheIntro.onDone = function() self.introPhase = "ending" end
+        else
+            self.introPhase = "ending"
+        end
+    end
+    -- The title screen done with (see ShowMenu): its node destroyed, and only once it is really
+    -- gone -- the engine finishes a Destruct at the end of the frame, so a sweep on the same tick
+    -- freed none of the title's 6 MB, the menus and the sky's stars loaded on top of it, and two
+    -- star frames found no room (the menu's sky then flickered to black) -- swept, twice, a tick
+    -- apart; then the rest is loaded.
+    if (self.introPhase == "ending") then
+        self.introPhase = "going"
+        if (self.introNode ~= nil) then self.introNode:Destruct() end
         self.introNode, TheIntro = nil, nil
+    elseif (self.introPhase == "going") then
+        self.introPhase = "swept"
         Sweep()
-        self:ShowMenu()
+    elseif (self.introPhase == "swept") then
+        self.introPhase = "done"
+        Sweep()
+        if (self.kept ~= nil) then
+            self:SpawnMenus(nil)                -- back from the title: the stage's shares are kept
+        else
+            self:ShowMenu()                     -- at boot: everything else is loaded now
+        end
     end
     if (self.going ~= nil) then self:TickGoing(deltaTime) end
     if (self.returning ~= nil) then self:TickReturning(deltaTime) end

@@ -52,7 +52,10 @@ MUSIC = [("ss_intro.wav", "SW_SpecialStage_Intro", 0x51C0FFEE00300001),
          ("menuintro.wav", "SW_SpecialStage_MenuIntro", 0x51C0FFEE0030000D),        # the menus': once,
          ("menuloop.wav", "SW_SpecialStage_MenuLoop", 0x51C0FFEE0030000E),          # then this
          ("marathon.wav", "SW_SpecialStage_Marathon", 0x51C0FFEE0030000F),          # the marathon's, whole, looped
-         ("title_theme.wav", "SW_TitleTheme", 0x51C0FFEE00300023)]                  # the title screen's, once
+         ("title_theme.wav", "SW_TitleTheme", 0x51C0FFEE00300023),                  # the title screen's, once
+         ("marathon_start.wav", "SW_SpecialStage_MarathonIntro", 0x51C0FFEE00300024),  # a marathon's: once,
+         ("marathon_loop.wav", "SW_SpecialStage_MarathonLoop", 0x51C0FFEE00300025),    # then this
+         ("timeattack_loop.wav", "SW_SpecialStage_TimeAttack", 0x51C0FFEE00300026)]    # a time attack's, looped
 EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_LoseRings", 0x51C0FFEE00300011),
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),

@@ -25,4 +25,6 @@
 --     perf = true       the stage's parts timed one by one into the SD perf log's LUA lines
 --                       (Screens.lua TimeStageParts; needs a log build)
 
+--     introAuto = seconds  the title screen goes on to the menus by itself after that long
+
 GcTest = {}

@@ -46,7 +46,7 @@ fastest.
 
 ## Credits
 
-- **Music**: megabaz
+- **Music**: Falk
 - **Sonic model**: murissargb
 - **Lives icon**: eris1521987
 
