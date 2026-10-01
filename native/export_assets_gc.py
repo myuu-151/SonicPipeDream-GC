@@ -51,7 +51,8 @@ MUSIC = [("ss_intro.wav", "SW_SpecialStage_Intro", 0x51C0FFEE00300001),
          ("stage7_loop.wav", "SW_SpecialStage_Stage7Loop", 0x51C0FFEE0030000C),
          ("menuintro.wav", "SW_SpecialStage_MenuIntro", 0x51C0FFEE0030000D),        # the menus': once,
          ("menuloop.wav", "SW_SpecialStage_MenuLoop", 0x51C0FFEE0030000E),          # then this
-         ("marathon.wav", "SW_SpecialStage_Marathon", 0x51C0FFEE0030000F)]          # the marathon's, whole, looped
+         ("marathon.wav", "SW_SpecialStage_Marathon", 0x51C0FFEE0030000F),          # the marathon's, whole, looped
+         ("title_theme.wav", "SW_TitleTheme", 0x51C0FFEE00300023)]                  # the title screen's, once
 EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_LoseRings", 0x51C0FFEE00300011),
            ("Jump.ogg", "SW_Jump", 0x51C0FFEE00300012), ("Checkpoint.wav", "SW_Checkpoint", 0x51C0FFEE00300013),
            ("Get_Emerald.wav", "SW_GetEmerald", 0x51C0FFEE00300014),
@@ -157,6 +158,18 @@ def sonic():
     shutil.copytree(src, dst)
     size = sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
     print("Sonic: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
+
+
+def intro():
+    """The title screen's assets, the PC's as they are (its proj/Assets/Intro: the emblem, Sonic's
+    96 frames, the day sky -- its own copies of the pack's two textures among them -- the sea,
+    PRESS START)."""
+    src, dst = os.path.join(PC, "proj", "Assets", "Intro"), os.path.join(PROJ, "Assets", "Intro")
+    if os.path.isdir(dst):
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+    size = sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
+    print("Intro: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
 
 
 STAR_FRAMES = 8                     # Sky.lua's STAR_FRAMES must say the same
@@ -382,7 +395,7 @@ def menu():
 
 if __name__ == "__main__":
     # python native/export_assets_gc.py [part ...]   -- all of them, or only those named
-    parts = {"sonic": sonic, "sounds": sounds, "hud": hud, "sky": sky, "skies": skies,
+    parts = {"sonic": sonic, "intro": intro, "sounds": sounds, "hud": hud, "sky": sky, "skies": skies,
              "emeralds": emeralds, "menu": menu}
     for name in (sys.argv[1:] or list(parts)):
         parts[name]()

@@ -552,6 +552,9 @@ end
 # Scripts that are the PC's with a change or two (or none).
 OTHERS = {
     "SpecialStageMusic.lua": [],
+    "Intro.lua": [],                # the title screen (Screens.lua's Sky:ShowMenu puts it up first)
+    "DaySky.lua": [],               # its sky
+    "WaterBed.lua": [],             # its sea
     "PadInput.lua": [],             # the controller, the PC's (which began as this build's own)
     "SavePrompt.lua": [],           # the PC's; it speaks of slot A here, of the Saves folder there
     "Loading.lua": [],              # the PC's (which began as this build's own); scaled, so the same here

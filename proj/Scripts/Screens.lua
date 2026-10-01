@@ -105,6 +105,27 @@ SKY_FRAME_BYTES = 64 * 1024 + 64                -- a diamond frame's block: its 
 PIECE_ARRAY_BYTES = { 9776 * 16, 4941 * 16, 4644 * 16, 2322 * 16 }
 
 function Sky:ShowMenu()
+    -- THE TITLE SCREEN FIRST (Intro.lua, the PC's): once, at boot, before anything below is
+    -- loaded. When START is pressed it calls back, and Sky:Tick takes it down -- its nodes gone and
+    -- swept, the heap as it was -- and calls this again for the rest. A GcTest run skips it (unless
+    -- it asks for it: GcTest.intro), so the tests still go straight where they are pointed.
+    -- (named, the switches: every script's table also carries the engine's own field)
+    local testing = false
+    for _, k in ipairs({ "marathon", "marathonFirst", "pick", "picks", "exit", "wait", "autoplay",
+                         "start", "timeAttack", "thenMarathon", "rounds" }) do
+        if (GcTest ~= nil and GcTest[k] ~= nil) then testing = true end
+    end
+    if (GcTest ~= nil and GcTest.intro) then testing = false end
+    if (self.kept == nil and self.introPhase == nil and not testing) then
+        self.introPhase = "on"
+        self.introNode = self:GetWorld():SpawnNode("Canvas")
+        self.introNode:SetName("Intro")
+        self.introNode:SetScript("Intro")
+        if (TheIntro ~= nil) then
+            TheIntro.onDone = function() self.introPhase = "ending" end
+            return
+        end
+    end
     -- What every stage uses -- Sonic, the HUD's art, the rings, the bomb, the effects -- is loaded
     -- ONCE, here at boot, before anything else, and kept for the whole session (the stage's NODES
     -- are still torn down between stages; see TeardownStage). Loaded first it sits together at
@@ -981,6 +1002,13 @@ function Sky:Tick(deltaTime)
     local loading = (self.going ~= nil and (self.going.step < 3 or self.going.step >= 25)) or self.returning ~= nil
     if (not loading) then pcTick(self, deltaTime) end
     if (loading and MenuMusic ~= nil) then MenuMusic.Tick(deltaTime) end   -- (pcTick ticks it otherwise)
+    if (self.introPhase == "ending") then       -- the title screen done with (see ShowMenu)
+        self.introPhase = "done"
+        self.introNode:Destruct()
+        self.introNode, TheIntro = nil, nil
+        Sweep()
+        self:ShowMenu()
+    end
     if (self.going ~= nil) then self:TickGoing(deltaTime) end
     if (self.returning ~= nil) then self:TickReturning(deltaTime) end
     self:TestExit(deltaTime)
