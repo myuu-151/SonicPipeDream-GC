@@ -27,5 +27,7 @@
 
 --     introAuto = seconds  the title screen goes on to the menus by itself after that long
 --     titleAgain = seconds  on the title menu that long, B is pressed once: back to the title
+--     allEmeralds = true   every emerald counts as won (not saved so): Super Sonic can be tried
+--     superAt = seconds    into a stage, he gets the rings for Super 5 s before and transforms then
 
 GcTest = {}
