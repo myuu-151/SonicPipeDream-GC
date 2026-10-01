@@ -419,6 +419,37 @@ end
         if (TheSky ~= nil and TheSky.StashSky ~= nil and sky ~= nil) then TheSky:StashSky(sky) end
     end
 """),
+    # -- THE SPIN DASH IS ON L on a GameCube pad (the owner's choice, 2026-10-01), not R.
+    ("""-- R held: the pad's R (a GameCube's) or ZR, or E on a keyboard.
+local function SpinHeld()
+    if (Input.IsKeyDown(Key.E)) then return true end
+    return Input.IsGamepadButtonDown(Gamepad.R1) or Input.IsGamepadButtonDown(Gamepad.R2)
+end""", """-- L held (GAMECUBE: L, not the PC's R): the pad's L or ZL, or E on a keyboard.
+local function SpinHeld()
+    if (Input.IsKeyDown(Key.E)) then return true end
+    return Input.IsGamepadButtonDown(Gamepad.L1) or Input.IsGamepadButtonDown(Gamepad.L2)
+end"""),
+    # -- A TIME ATTACK'S RINGS BUY TIME (GAMECUBE, the owner's, 2026-10-01): every so many rings
+    # taken puts a second back on the clock -- GameOptions.timeAttack.ringsPerSecond, set on the time
+    # attack's setup (OFF: none). Counted on rings taken, not held: a hit that scatters them takes
+    # none of the time back.
+    ("""                self.rings = self.rings + 1
+                self:Sound("Ring")
+""", """                self.rings = self.rings + 1
+                local per = self.data.timeAttack and GameOptions ~= nil and GameOptions.timeAttack.ringsPerSecond or 0
+                if (per > 0 and not self.clockStopped and self.over < 0.0) then
+                    self.ringsTowardSecond = (self.ringsTowardSecond or 0) + 1
+                    if (self.ringsTowardSecond >= per) then
+                        self.ringsTowardSecond = 0
+                        self.timeLeft = self.timeLeft + 1.0
+                    end
+                end
+                self:Sound("Ring")
+"""),
+    ("""    self.timeLeft = (self.data.timeAttack and GameOptions ~= nil) and GameOptions.timeAttack.time or 0.0
+""", """    self.timeLeft = (self.data.timeAttack and GameOptions ~= nil) and GameOptions.timeAttack.time or 0.0
+    self.ringsTowardSecond = 0                  -- GAMECUBE: see the rings that buy time
+"""),
     # -- THE RUN'S CENTRE LINE HOLDS ONLY WHAT IS NEAR HIM AND AHEAD. The PC's keeps every frame of
     # the run in one table, a slot a frame, for as long as the run goes on; past 8192 frames (the
     # fourth zone or so) Lua wanted that table's slots in one 128 KB block, which a console's heap, in
@@ -532,8 +563,43 @@ OTHERS = {
 """)],
     "MarathonKit.lua": [],
     "MenuMusic.lua": [],
-    "GameOptions.lua": [],          # the settings, kept with the save on the card
-    "OptionsPrompt.lua": [],        # OPTIONS on the title menu            # the menus' music: Screens.lua ticks it under its loading screen too
+    "GameOptions.lua": [            # the settings, kept with the save on the card
+        # GAMECUBE: a time attack's rings buy time (SpecialStage.lua's patch); its setting
+        ("local DEFAULT_TIME_ATTACK = { rounds = 7, start = 2, climb = 3, leniency = 2, lives = 3, time = 60 }",
+         "local DEFAULT_TIME_ATTACK = { rounds = 7, start = 2, climb = 3, leniency = 2, lives = 3, time = 60,\n"
+         "                              ringsPerSecond = 10 }   -- GAMECUBE: rings for a second on the clock (0 off)"),
+        ("""    time = { values = { 30, 60, 90, 120, 180 },
+             show = function(v) return string.format("%d:%02d", v // 60, v % 60) end },
+}""", """    time = { values = { 30, 60, 90, 120, 180 },
+             show = function(v) return string.format("%d:%02d", v // 60, v % 60) end },
+    ringsPerSecond = { values = { 0, 5, 10, 20, 50 },                  -- GAMECUBE
+                       show = function(v) return (v == 0) and "OFF" or tostring(v) end },
+}"""),
+        ("""           .. tostring(TimeIndex(t.time))
+end""", """           .. tostring(TimeIndex(t.time))
+           .. tostring(RingsIndex(t.ringsPerSecond))      -- GAMECUBE: the 19th letter
+end
+
+-- GAMECUBE: rings-for-a-second's place in its CHOICES, as a digit in the save (1 if not one of them)
+function RingsIndex(v)
+    for i, r in ipairs(GameOptions.CHOICES.ringsPerSecond.values) do
+        if (r == v) then return i end
+    end
+    return 1
+end"""),
+        ("""    if (ti ~= nil and times[ti] ~= nil) then t.time = times[ti] end
+""", """    if (ti ~= nil and times[ti] ~= nil) then t.time = times[ti] end
+    local rings = GameOptions.CHOICES.ringsPerSecond.values     -- GAMECUBE (a save from before: the default)
+    local ri = tonumber(text:sub(19, 19))
+    if (ri ~= nil and rings[ri] ~= nil) then t.ringsPerSecond = rings[ri] end
+"""),
+    ],
+    "OptionsPrompt.lua": [
+        ("""                             { label = "TIME", setting = "time" },
+""", """                             { label = "TIME", setting = "time" },
+                             { label = "RINGS FOR +1 SECOND", setting = "ringsPerSecond" },     -- GAMECUBE
+"""),
+    ],        # OPTIONS on the title menu            # the menus' music: Screens.lua ticks it under its loading screen too
     # The HUD is the PC's. A television hides the outer few percent of the picture, so here it keeps
     # clear of the edges.
     "SpecialStageUI.lua": [("local SAFE_MARGIN = 0.0\n", "local SAFE_MARGIN = 0.04\n")],

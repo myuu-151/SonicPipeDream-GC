@@ -61,6 +61,7 @@ local PAGES = {
                              { label = "DIFFICULTY CLIMB", setting = "climb" },
                              { label = "LIVES", setting = "lives" },
                              { label = "TIME", setting = "time" },
+                             { label = "RINGS FOR +1 SECOND", setting = "ringsPerSecond" },     -- GAMECUBE
                              { label = "START", start = true } } },
 }
 

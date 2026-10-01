@@ -20,7 +20,7 @@ The GameCube version of [Sonic Pipe Dream](https://github.com/myuu-151/SonicPipe
 |---|---|---|
 | Stick or d-pad | Move the highlight | Steer round the pipe |
 | A | Choose | Jump; again in the air to drop dash; hold through a landing to bounce highest |
-| R (hold) | | Spin dash: skid to a stop, press A to rev, let go of R to blast off |
+| L (hold) | | Spin dash: skid to a stop, press A to rev, let go of L to blast off |
 | B | Back | |
 | Start | Choose | Pause: Continue or Exit |
 

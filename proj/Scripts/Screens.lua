@@ -811,7 +811,10 @@ function Sky:TestPick(deltaTime)
     self.pickIn = (self.pickIn or GcTest.wait or 3.0) - deltaTime
     if (self.pickIn > 0.0) then return end
     local stage = GcTest.pick
-    if (stage == 0) then
+    if (GcTest.picks ~= nil) then                   -- a list of stages, in turn (then round again)
+        self.cycle = (self.cycle or 0) % #GcTest.picks + 1
+        stage = GcTest.picks[self.cycle]
+    elseif (stage == 0) then
         self.cycle = (self.cycle or 0) % STAGES + 1
         stage = self.cycle
     end

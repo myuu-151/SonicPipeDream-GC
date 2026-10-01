@@ -124,10 +124,10 @@ local DASH_LONG = 0.45          -- longer along the track by this the instant he
 local DASH_STRETCH_TIME = 0.35
 local BALL_ROLLS = false        -- the ball turns as it rolls (the GameCube's, gloss painted on, does not)
 
--- R held: the pad's R (a GameCube's) or ZR, or E on a keyboard.
+-- L held (GAMECUBE: L, not the PC's R): the pad's L or ZL, or E on a keyboard.
 local function SpinHeld()
     if (Input.IsKeyDown(Key.E)) then return true end
-    return Input.IsGamepadButtonDown(Gamepad.R1) or Input.IsGamepadButtonDown(Gamepad.R2)
+    return Input.IsGamepadButtonDown(Gamepad.L1) or Input.IsGamepadButtonDown(Gamepad.L2)
 end
 local BALL_SPIN = 12.0          -- radians a second: two turns a second in the air
 local REACH_FRAMES = 0.55       -- a hit: within this far along the track...
@@ -1123,6 +1123,7 @@ function SpecialStage:Restart()
     self.lives = (self.data.timeAttack and GameOptions ~= nil) and GameOptions.timeAttack.lives or 1
     -- a time attack's time left: from the setup's, down
     self.timeLeft = (self.data.timeAttack and GameOptions ~= nil) and GameOptions.timeAttack.time or 0.0
+    self.ringsTowardSecond = 0                  -- GAMECUBE: see the rings that buy time
     self.clockStopped = false
     -- For testing the checks without playing to them: set S2_TEST_RINGS in the environment.
     self.autoplay = (os ~= nil and os.getenv ~= nil and os.getenv("S2_AUTOPLAY") ~= nil)
@@ -1675,6 +1676,14 @@ function SpecialStage:Collide(fromFrame)
                 if (had == 0 and not recovering and self.data.timeAttack and self.over < 0.0) then self:LoseLife() end
             else
                 self.rings = self.rings + 1
+                local per = self.data.timeAttack and GameOptions ~= nil and GameOptions.timeAttack.ringsPerSecond or 0
+                if (per > 0 and not self.clockStopped and self.over < 0.0) then
+                    self.ringsTowardSecond = (self.ringsTowardSecond or 0) + 1
+                    if (self.ringsTowardSecond >= per) then
+                        self.ringsTowardSecond = 0
+                        self.timeLeft = self.timeLeft + 1.0
+                    end
+                end
                 self:Sound("Ring")
                 self:SpawnSparkles(o)
             end

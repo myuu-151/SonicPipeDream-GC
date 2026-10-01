@@ -23,7 +23,8 @@
 --                                      settings
 
 local DEFAULT_MARATHON = { rounds = 7, start = 2, climb = 3, leniency = 2 }
-local DEFAULT_TIME_ATTACK = { rounds = 7, start = 2, climb = 3, leniency = 2, lives = 3, time = 60 }
+local DEFAULT_TIME_ATTACK = { rounds = 7, start = 2, climb = 3, leniency = 2, lives = 3, time = 60,
+                              ringsPerSecond = 10 }   -- GAMECUBE: rings for a second on the clock (0 off)
 
 GameOptions = GameOptions or { muteStageMusic = false, touched = false, marathon = {}, timeAttack = {} }
 GameOptions.timeAttack = GameOptions.timeAttack or {}
@@ -50,6 +51,8 @@ GameOptions.CHOICES = {
     lives = { values = { 1, 3, 5, 0 }, show = function(v) return (v == 0) and "INFINITE" or tostring(v) end },
     time = { values = { 30, 60, 90, 120, 180 },
              show = function(v) return string.format("%d:%02d", v // 60, v % 60) end },
+    ringsPerSecond = { values = { 0, 5, 10, 20, 50 },                  -- GAMECUBE
+                       show = function(v) return (v == 0) and "OFF" or tostring(v) end },
 }
 
 -- A time's place in CHOICES.time (1 if it is not one of them).
@@ -71,6 +74,15 @@ function GameOptions.Encode()
            .. tostring(m.start) .. tostring(m.climb) .. tostring(m.leniency) .. "0"
            .. string.char(65 + t.rounds) .. tostring(t.start) .. tostring(t.climb) .. tostring(t.lives)
            .. tostring(TimeIndex(t.time))
+           .. tostring(RingsIndex(t.ringsPerSecond))      -- GAMECUBE: the 19th letter
+end
+
+-- GAMECUBE: rings-for-a-second's place in its CHOICES, as a digit in the save (1 if not one of them)
+function RingsIndex(v)
+    for i, r in ipairs(GameOptions.CHOICES.ringsPerSecond.values) do
+        if (r == v) then return i end
+    end
+    return 1
 end
 
 -- From a save's text. Settings changed this session and not saved yet stay as the player set them
@@ -104,4 +116,7 @@ function GameOptions.Decode(text)
     local times = GameOptions.CHOICES.time.values
     local ti = tonumber(text:sub(18, 18))
     if (ti ~= nil and times[ti] ~= nil) then t.time = times[ti] end
+    local rings = GameOptions.CHOICES.ringsPerSecond.values     -- GAMECUBE (a save from before: the default)
+    local ri = tonumber(text:sub(19, 19))
+    if (ri ~= nil and rings[ri] ~= nil) then t.ringsPerSecond = rings[ri] end
 end

@@ -358,6 +358,9 @@ def main():
     open(out, "w", encoding="ascii", newline="\n").write(
         "-- Written by native/export_gc.py from the PC repo's %s.json. Do not edit by hand.\n"
         "StageData%d = %s\n" % (name, STAGE, pc["lua"](table)))
+    # in pieces small enough to load on a console after a session's worth of stages
+    import split_stage_data
+    split_stage_data.split(out)
     total = sum(os.path.getsize(os.path.join(ASSETS, f)) for f in os.listdir(ASSETS))
     print("\nstage -> %s (%d pieces, %d frames, %d objects)" % (
         out, len(piece_list), frames, sum(len(x["objects"]) for x in sections)))

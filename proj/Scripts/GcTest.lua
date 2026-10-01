@@ -5,6 +5,7 @@
 -- so these stand in for them. ALL OFF in anything shipped: GcTest = {}.
 --
 --     pick = n          on the stage select, choose stage n by itself (0: 1 to 7, then round again)
+--     picks = { n, ... }  with `pick`: these stages in turn instead (e.g. { 7, 6 })
 --     exit = seconds    leave a stage that long after it starts, as EXIT from the pause menu does
 --     free = true       free memory, in KB, in the corner of every screen
 --     wait = seconds    how long the stage select shows before `pick` chooses (default 3)
