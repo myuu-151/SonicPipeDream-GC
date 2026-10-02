@@ -68,10 +68,8 @@ EFFECTS = [("Ring.wav", "SW_Ring", 0x51C0FFEE00300010), ("LoseRings.ogg", "SW_Lo
            ("Release.ogg", "SW_SpinRelease", 0x51C0FFEE00300020),      # a spin dash let go
            ("Charge.ogg", "SW_SpinRev", 0x51C0FFEE00300021),           # ...and revved, a press of A
            ("Hurt.ogg", "SW_Hurt", 0x51C0FFEE00300022),                # GAME OVER (a time attack)
-           ("super-sonic.mp3", "SW_SuperSonic", 0x51C0FFEE00300027),   # the transformation,
-           ("super_aura_intro.wav", "SW_SuperAuraIntro", 0x51C0FFEE00300028),   # his aura once,
-           ("super_aura_loop.wav", "SW_SuperAuraLoop", 0x51C0FFEE00300029)]     # then this while he is Super
-NORMALISE = {"SW_GetEmerald": 0.97}         # as the PC does: that file is quiet
+           ("super-sonic.mp3", "SW_SuperSonic", 0x51C0FFEE00300027)]   # the transformation
+NORMALISE = {"SW_GetEmerald": 0.97, "SW_SuperSonic": 0.95}         # as the PC does: that file is quiet
 
 
 def stereo_at(path, rate):
@@ -172,6 +170,17 @@ def super_sonic():
     if os.path.isdir(dst):
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
+    # His sheet as RGB5A3 (16 bits a texel: 128 KB, not RGBA8's 256), as the title's clouds are, and
+    # kept loaded from boot (Screens.lua's BuildAssets). Loaded at the transformation after long
+    # play, its 256 KB found no room: the engine logs that and leaves a texture with no texels,
+    # which draws BLACK -- and LoadAsset still returns it, so the script cannot tell.
+    sheet = os.path.join(dst, "T_SuperSonic.oct")
+    d = bytearray(open(sheet, "rb").read())
+    body = 25 + struct.unpack_from("<I", d, 21)[0]
+    struct.pack_into("<I", d, body + 16, 4)           # PixelFormat::RGBA5551
+    d[body + 28] = 0                                  # no mipmaps
+    d[body + 31] = 1                                  # forced high quality: cooked in its own format
+    open(sheet, "wb").write(bytes(d))
     size = sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
     print("SuperSonic: %d files, %.2f MB" % (len(os.listdir(dst)), size / 1048576.0))
 

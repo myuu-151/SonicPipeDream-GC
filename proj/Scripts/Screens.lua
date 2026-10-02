@@ -55,13 +55,14 @@ local MARATHON_BREATH = 20          -- MarathonGen.BREATH here: its work between
 -- Everything SpecialStage:Build loads, the first time a stage is played. Asked for with the
 -- stage's own assets, so that first time is no slower to leave the loading screen.
 local function BuildAssets()
-    local names = { "SM_Ring", "SM_Bomb", "SM_PlayerBall", "SM_FxQuad", "SM_FxQuadBoom", "M_Explosion",
+    local names = { "SM_Ring", "SM_Bomb", "SM_PlayerBall", "SM_PlayerBallSuper", "SM_FxQuad", "SM_FxQuadBoom", "M_Explosion",
                     "SM_FxQuadRazor", "SM_FxQuadPuff", "SM_FxTrace", "SW_SpinRev", "SW_SpinRelease", "SW_Hurt",
                     -- every effect a stage plays, loaded at boot with the rest: the checkpoint and the
                     -- emerald, the biggest, were loaded the first time each played and in a marathon's
                     -- cut-up heap that could fail -- and then they were silent all run
                     "SW_Ring", "SW_Jump", "SW_Checkpoint", "SW_GetEmerald", "SW_Fail", "SW_LoseRings",
-                    "SW_Explosion", "SW_ExitStage",
+                    "SW_Explosion", "SW_ExitStage", "SW_SuperSonic",
+                    "T_SuperSonic", "M_SuperSonic", "T_UI_Super",     -- Super Sonic's sheet, resident: see export_assets_gc.py
                     "SM_Shadow", "SM_Sonic_Idle_00", "SM_Emerald",
                     "T_UI_Emblem", "T_UI_EmblemRed", "T_UI_Flag", "T_UI_FlagLeft", "T_UI_SonicRings",
                     "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total", "T_UI_Time", "T_UI_Lives" }

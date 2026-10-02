@@ -42,7 +42,7 @@ CHANGES = [
 -- The pad reaches the PC's keys through PadInput.lua; only the steering is given the stick here.
 """),
     # -- less of everything alive at once
-    ("local SEE_AHEAD, SEE_BEHIND = 110, 6 ", """local PIECES_AHEAD, PIECES_BEHIND = 72, 12   -- frames of TRACK shown round the player. The PC shows all
+    ("local SEE_AHEAD, SEE_BEHIND = 110, 6 ", """local PIECES_AHEAD, PIECES_BEHIND = 72, 40   -- frames of TRACK shown round the player. The PC shows all
                                         -- 121 pieces and lets the engine cull; here a piece is up to
                                         -- 21,000 triangles and the far ones are not worth a draw call
 local SEE_AHEAD, SEE_BEHIND = 72, 6 """),

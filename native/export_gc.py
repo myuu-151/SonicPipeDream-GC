@@ -154,6 +154,9 @@ def write_ball():
     write_painted_gloss("SM_PlayerBall", 221,
                         simple("Ball", lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=3, radius=1.7)),
                         lambda k: (0.12, 0.30, 0.95), lambda k: True, None, light_ahead=BALL_LIGHT_AHEAD)
+    write_painted_gloss("SM_PlayerBallSuper", 223,
+                        simple("Ball", lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=3, radius=1.7)),
+                        lambda k: pc["SUPER_BALL"], lambda k: True, None, light_ahead=BALL_LIGHT_AHEAD)
 
 
 # --- really lit -----------------------------------------------------------------------------
