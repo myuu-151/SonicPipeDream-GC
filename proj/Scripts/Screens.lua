@@ -397,10 +397,23 @@ function Sky:TickGoing(deltaTime)
         if (TheSpecialStage == nil or not TheSpecialStage.built) then
             for _, name in ipairs(BuildAssets()) do Want(name) end
         end
+        -- SUPER SONIC'S FRAMES, with every emerald won: read behind the loading screen, last of all,
+        -- so the stage finds them in (SpecialStage:LoadSuper takes them at once). Read in the stage
+        -- instead, they shared the card with the sky's streaming, and the sky ran slow until he was
+        -- ready. (The counts are SpecialStage.lua's SUPER_FLY_FRAMES, TRANSFORM_GOLD, TRANSFORM_BLUE.)
+        g.superNames = nil
+        if (AllEmeraldsWon == true) then
+            g.superNames = {}
+            for i = 0, 12 do g.superNames[#g.superNames + 1] = string.format("SM_Super_Transform_%02d", i) end
+            for i = 0, 5 do g.superNames[#g.superNames + 1] = string.format("SM_Sonic_Transform_%02d", i) end
+            for i = 0, 23 do g.superNames[#g.superNames + 1] = string.format("SM_Super_Fly_%02d", i) end
+            for _, n in ipairs(g.superNames) do Want(n) end
+        end
         local function Rank(name)
             if (name:find("Drop") or name:find("Rise")) then return 0 end
             if (name:find("Corner")) then return 1 end
             if (name:find("SM_Piece")) then return 2 end
+            if (name:find("_Transform_") or name:find("SM_Super_Fly")) then return 4 end
             return 3
         end
         for i, name in ipairs(names) do names[i] = { name = name, rank = Rank(name), at = i } end
@@ -418,6 +431,13 @@ function Sky:TickGoing(deltaTime)
         end
         if (ready or g.clock > WAIT_AT_MOST) then
             if (not ready) then Log.Warning("Screens: a stage asset never arrived; starting anyway") end
+            -- Super Sonic's frames held till the stage takes them (SpecialStage:LoadSuper lets go):
+            -- an asset that has arrived and is held by nothing is swept, and a marathon builds its
+            -- first zone between here and the stage
+            if (AllEmeraldsWon == true) then
+                SuperFramesHeld = {}
+                for _, a in ipairs(g.superNames or {}) do SuperFramesHeld[#SuperFramesHeld + 1] = LoadAsset(a) end
+            end
             if (g.stage == "Marathon") then
                 g.step = 25                     -- its first zone, built now the pipe is in
             else
@@ -510,6 +530,7 @@ function Sky:TeardownStage()
     self.startedSpecialStage = false                -- so StartSpecialStage builds it afresh
     for k = 1, STAGES do _G["StageData" .. k] = nil end
     MarathonGen, MarathonKit, MarathonFirstZone, MarathonSeed = nil, nil, nil, nil
+    SuperFramesHeld = nil
     PipePalettes = nil
     -- The next sky's stash gives its 4 MB of ARAM back: the star textures are kept for the session,
     -- and their stash blocks with them left too little ARAM for a stage's music (8 MB, intro and
