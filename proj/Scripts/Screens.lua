@@ -43,6 +43,9 @@ end
 -- take a third of the memory -- 1.5 MB a stage instead of 4.2 -- and that headroom is what keeps
 -- the big pieces loading after many changes of stage. (Engine: GxUtils.cpp, BindStaticMesh.)
 if (Renderer.SetCompactUnlitMeshes ~= nil) then Renderer.SetCompactUnlitMeshes(true) end
+-- ...and lit, textured meshes (Sonic, Super Sonic, the title's) in the GPU's compressed vertex
+-- formats: a third of the memory, the same look (GxUtils.cpp, GFX_SetQuantizedMeshes)
+if (Renderer.SetQuantizedMeshes ~= nil) then Renderer.SetQuantizedMeshes(true) end
 
 local STAGES = 7
 local WAIT_AT_MOST = 30.0           -- seconds: a stage starts even if something never arrives,
