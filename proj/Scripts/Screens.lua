@@ -62,7 +62,7 @@ local function BuildAssets()
                     -- cut-up heap that could fail -- and then they were silent all run
                     "SW_Ring", "SW_Jump", "SW_Checkpoint", "SW_GetEmerald", "SW_Fail", "SW_LoseRings",
                     "SW_Explosion", "SW_ExitStage", "SW_SuperSonic",
-                    "T_SuperSonic", "M_SuperSonic", "T_UI_Super",     -- Super Sonic's sheet, resident: see export_assets_gc.py
+                    "T_SuperSonic", "M_SuperSonic", "T_UI_Super", "T_UI_SonicHead", "T_UI_SuperHead",     -- Super Sonic's sheet, resident: see export_assets_gc.py
                     "SM_Shadow", "SM_Sonic_Idle_00", "SM_Emerald",
                     "T_UI_Emblem", "T_UI_EmblemRed", "T_UI_Flag", "T_UI_FlagLeft", "T_UI_SonicRings",
                     "T_UI_Thumb", "T_UI_ThumbDown", "T_UI_Total", "T_UI_Time", "T_UI_Lives" }
