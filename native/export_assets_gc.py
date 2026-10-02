@@ -121,6 +121,15 @@ def sounds():
     os.makedirs(out, exist_ok=True)
     src = os.path.join(PC, "external", "audio")
     total = 0
+    for file_name, asset, uuid in MUSIC + EFFECTS:
+        # The recordings are the author's own raw files, not in either repo; what's made from them
+        # is committed here. Without them (any other checkout), the committed sounds are kept.
+        if not os.path.exists(os.path.join(src, file_name)):
+            if not os.path.exists(os.path.join(out, asset + ".oct")):
+                raise SystemExit("no %s, and no %s.oct made from it before" % (file_name, asset))
+    if not os.path.isdir(src):
+        print("sounds: kept as committed (no external/audio in the PC repo)")
+        return
     for file_name, asset, uuid in MUSIC:
         audio = stereo_at(os.path.join(src, file_name), MUSIC_RATE)
         if os.environ.get("GC_MUSIC_SECONDS"):                 # a test: trims the tracks

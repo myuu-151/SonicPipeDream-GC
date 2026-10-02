@@ -34,7 +34,9 @@ Both repos sit side by side:
     done
 
     # 2. everything else: Sonic, sounds, music, HUD, skies, emeralds, menus  (needs Pillow, numpy, soundfile)
-    #    The music and the skies are big and are NOT in git: this step makes them (1.8 GB of skies).
+    #    The skies are big and are NOT in git: this step makes them from the PC repo (1.8 GB).
+    #    The music and sound effects are in git, made from recordings that are in neither repo;
+    #    without those the committed ones are kept.
     #    Name parts to make only those: python native/export_assets_gc.py menu emeralds
     python native/export_assets_gc.py
 
