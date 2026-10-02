@@ -29,5 +29,10 @@
 --     titleAgain = seconds  on the title menu that long, B is pressed once: back to the title
 --     allEmeralds = true   every emerald counts as won (not saved so): Super Sonic can be tried
 --     superAt = seconds    into a stage, he gets the rings for Super 5 s before and transforms then
+--     jumpEvery = seconds  he jumps that often, on the pipe
+--     spinAt = seconds     he spin dashes from then, every 8 s (held 1.4 s, revved)
+--     startRings = n       every stage starts with n rings (the 50-ring code)
+--     memLog = seconds     free memory, Lua's heap and the effects, logged that often (needs the
+--                          engine's OCT_DOLPHIN_EMU_LOG 1 to be seen: Dolphin only)
 
 GcTest = {}
