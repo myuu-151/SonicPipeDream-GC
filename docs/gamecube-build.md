@@ -28,6 +28,16 @@ Both repos sit side by side:
 
 ## Build
 
+**To build the disc from what's in git, use the builder** (`Build Sonic Pipe Dream.bat`,
+`native/builder.py`; see the README): it runs only steps 2's `sky_textures` and `skies` parts and
+step 4. Everything else the steps below make is committed. A disc built that way from fresh
+clones matches the release's file for file, except the program (when Octave's engine library has
+changed since) and a handful of small assets (the engine's default textures and fonts, its demo
+scenes, the lives icon) that Octave doesn't write byte for byte the same from one packaging to the
+next: unused mipmap padding, the order of a scene's properties.
+
+The steps, to remake everything from the PC repo:
+
     # 1. the stages: track pieces, rings, stage data, one run a stage (1 to 7), about 40 s each
     for n in 1 2 3 4 5 6 7; do
         blender -b ../Sonic2Special3D/external/halfpipe/TrackPiecesPack.blend --python native/export_gc.py -- $n

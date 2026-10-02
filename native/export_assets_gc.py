@@ -1,6 +1,10 @@
 """Everything but the stage itself, for the GameCube: Sonic, the sounds and the sky.
 
-    python native/export_assets_gc.py        (needs Pillow, numpy and soundfile)
+    python native/export_assets_gc.py [part ...]    (needs Pillow and numpy; the sounds soundfile)
+
+The PC repo is the folder beside this one called Sonic2Special3D or SonicPipeDream, or the one
+SPD_PC_REPO names. native/builder.py runs the parts a fresh checkout is missing: sky_textures
+and skies.
 
 All of it comes out of the PC repo (../Sonic2Special3D); nothing is designed here.
 
@@ -25,11 +29,43 @@ import struct
 import sys
 
 import numpy
-import soundfile
+
+try:
+    import soundfile                    # only the sounds need it
+except ImportError:
+    soundfile = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PC = os.path.abspath(os.path.join(HERE, "..", "..", "Sonic2Special3D"))
 PROJ = os.path.abspath(os.path.join(HERE, "..", "proj"))
+
+
+def find_pc():
+    """The PC repo: SPD_PC_REPO, else the folder beside this repo by its local or its GitHub name."""
+    if os.environ.get("SPD_PC_REPO"):
+        return os.path.abspath(os.environ["SPD_PC_REPO"])
+    for name in ("Sonic2Special3D", "SonicPipeDream"):
+        path = os.path.abspath(os.path.join(HERE, "..", "..", name))
+        if os.path.isdir(os.path.join(path, "proj", "Assets")):
+            return path
+    return os.path.abspath(os.path.join(HERE, "..", "..", "Sonic2Special3D"))
+
+
+PC = find_pc()
+
+
+def progress(done, total):
+    """How far a part is, for the builder's window (BUILD_PROGRESS set): "@@ DONE TOTAL" each time
+    the percentage moves."""
+    if os.environ.get("BUILD_PROGRESS") and total and (done == total or done * 100 // total != (done - 1) * 100 // total):
+        print("@@ %d %d" % (done, total), flush=True)
+
+
+def stamp(name, value):
+    """A note that a part was made, for the builder (proj/Intermediate is not in git)."""
+    folder = os.path.join(PROJ, "Intermediate")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, name + ".made"), "w") as f:
+        f.write(str(value))
 
 MAGIC, VERSION, TYPE_SOUNDWAVE = 0x4F435421, 14, 0x9A6A5AC0
 MUSIC_RATE, MUSIC_QUALITY = 32000, 0.5     # stereo, Vorbis quality 0.5: about 96 kbit/s
@@ -127,10 +163,15 @@ def sounds():
         if not os.path.exists(os.path.join(src, file_name)):
             if not os.path.exists(os.path.join(out, asset + ".oct")):
                 raise SystemExit("no %s, and no %s.oct made from it before" % (file_name, asset))
-    if not os.path.isdir(src):
-        print("sounds: kept as committed (no external/audio in the PC repo)")
+    if not any(os.path.exists(os.path.join(src, f)) for f, _, _ in MUSIC + EFFECTS):
+        print("sounds: kept as committed (the recordings aren't in the PC repo)")
         return
+    if soundfile is None:
+        raise SystemExit("the sounds need soundfile: py -m pip install soundfile")
     for file_name, asset, uuid in MUSIC:
+        if not os.path.exists(os.path.join(src, file_name)):
+            print("  %-24s kept as committed" % asset)
+            continue
         audio = stereo_at(os.path.join(src, file_name), MUSIC_RATE)
         if os.environ.get("GC_MUSIC_SECONDS"):                 # a test: trims the tracks
             audio = audio[:int(float(os.environ["GC_MUSIC_SECONDS"]) * MUSIC_RATE)]
@@ -152,6 +193,9 @@ def sounds():
         print("  %-24s stereo Vorbis, streamed from the disc, %.1f s, %.2f MB, %d kbit/s" % (
             asset, len(audio) / float(MUSIC_RATE), len(d) / 1048576.0, len(body) * 8 / (len(audio) / float(MUSIC_RATE)) / 1000))
     for file_name, asset, uuid in EFFECTS:
+        if not os.path.exists(os.path.join(src, file_name)):
+            print("  %-24s kept as committed" % asset)
+            continue
         mono = mono_at(os.path.join(src, file_name), EFFECT_RATE)
         if asset in NORMALISE:
             mono = mono * (NORMALISE[asset] / max(1e-9, numpy.abs(mono).max()))
@@ -242,6 +286,7 @@ def sky():
     full_w, full_h, full_pixels = medley.TEX_W, medley.TEX_H, medley.frame_pixels
 
     def small(f):
+        progress(f + 1, medley.FRAMES)
         img = Image.frombytes("RGBA", (full_w, full_h), full_pixels(f * SKY_EVERY))
         # Scaled with the colour weighted by its opacity ("RGBa"), or the transparent black round
         # every diamond bleeds into its edge. Then hard alpha again: the console's compressed
@@ -269,10 +314,33 @@ def sky():
             if name.startswith("T_S2Sky_Stars_"):
                 os.remove(os.path.join(textures, name))
 
-    pc_sky.OUT = os.path.join(PROJ, "Assets")
+    pc_sky.OUT = SKY_OUT or os.path.join(PROJ, "Assets")
     pc_sky.DIAMOND_MODE = "medley"
     pc_sky.main()
     print("sky: %d frames at %d x %d" % (medley.FRAMES, medley.TEX_W, medley.TEX_H))
+
+
+SKY_OUT = None
+
+
+def sky_textures():
+    """The sky's textures alone (T_S2Sky_*, not in git): sky() made in a folder of its own, and only
+    its textures taken, so the sky's material and dome, which are in git, are left as they are."""
+    import tempfile
+    global SKY_OUT
+    textures = os.path.join(PROJ, "Assets", "Textures")
+    with tempfile.TemporaryDirectory() as work:
+        SKY_OUT = work
+        sky()
+        SKY_OUT = None
+        made = sorted(n for n in os.listdir(os.path.join(work, "Textures")) if n.startswith("T_S2Sky_"))
+        for name in os.listdir(textures):
+            if name.startswith("T_S2Sky_"):
+                os.remove(os.path.join(textures, name))
+        for name in made:
+            shutil.move(os.path.join(work, "Textures", name), os.path.join(textures, name))
+    stamp("sky_textures", len(made))
+    print("sky textures: %d" % len(made))
 
 
 def hud():
@@ -334,13 +402,18 @@ SKY_NAMES = ["Midnight", "Dawn", "Pastel", "Sunset", "Aurora", "Inferno", "Noir"
 
 
 def skies():
+    files = [(name, f) for name in SKY_NAMES for f in sorted(os.listdir(os.path.join(PC, "proj", "Assets", "Skies", name)))]
     for name in SKY_NAMES:
-        src = os.path.join(PC, "proj", "Assets", "Skies", name)
         dst = os.path.join(PROJ, "Assets", "Skies", name)
         if os.path.isdir(dst):
             shutil.rmtree(dst)
-        shutil.copytree(src, dst)
-        print("sky %-9s %d files" % (name, len(os.listdir(dst))))
+        os.makedirs(dst)
+    for n, (name, f) in enumerate(files, 1):
+        shutil.copy2(os.path.join(PC, "proj", "Assets", "Skies", name, f), os.path.join(PROJ, "Assets", "Skies", name, f))
+        progress(n, len(files))
+    for name in SKY_NAMES:
+        print("sky %-9s %d files" % (name, len(os.listdir(os.path.join(PROJ, "Assets", "Skies", name)))))
+    stamp("skies", len(files))
 
 
 def emeralds():
@@ -443,6 +516,6 @@ def menu():
 if __name__ == "__main__":
     # python native/export_assets_gc.py [part ...]   -- all of them, or only those named
     parts = {"sonic": sonic, "super": super_sonic, "intro": intro, "sounds": sounds, "hud": hud, "sky": sky, "skies": skies,
-             "emeralds": emeralds, "menu": menu}
-    for name in (sys.argv[1:] or list(parts)):
+             "emeralds": emeralds, "menu": menu, "sky_textures": sky_textures}
+    for name in (sys.argv[1:] or [p for p in parts if p != "sky_textures"]):
         parts[name]()

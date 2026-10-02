@@ -1,0 +1,8 @@
+# What the disc carries as text, with the same line endings on every checkout: a Windows clone
+# would otherwise get the scripts, Config.ini and the project file with CRLF, and build a disc
+# whose files differ from the release's.
+*.lua text eol=lf
+*.ini text eol=lf
+*.octp text eol=lf
+# Raw palette bytes inside its strings: kept exactly as they are.
+proj/Scripts/PipePalettes.lua -text

@@ -38,6 +38,27 @@ fastest.
 - **Use DSP LLE** (`[Core] DSPHLE = False`). With DSP HLE the game freezes about 25 seconds in;
   the details are in the build notes.
 
+## Building it yourself
+
+The whole disc image builds from this repo and the PC one.
+
+You need:
+- **This repo and [the PC repo](https://github.com/myuu-151/SonicPipeDream)**, cloned side by
+  side (the builder lets you choose the PC one if it's elsewhere).
+- **[Octave-libogc](https://github.com/myuu-151/Octave-libogc)**, the v2.2 release or newer, with
+  its GameCube engine library built (`Engine/Build/GCN/libEngine.a`).
+- **[devkitPro](https://devkitpro.org)** with devkitPPC.
+- **Python 3** with Pillow and numpy: `py -m pip install pillow numpy`.
+
+Double-click **`Build Sonic Pipe Dream.bat`**. The builder window checks each of those and says
+how to fix anything missing. One button then makes what isn't in git from the PC repo (the sky's
+384 frames, from its sky generator, and the seven other skies), packages the disc with Octave and
+gives it its name. Each step shows how far it is; nothing opens a window of its own. The first
+build takes about four minutes, later ones about two and a half. The disc image is
+`proj/Packaged/GameCube/SonicPipeDream.iso`.
+
+![The builder](docs/builder.png)
+
 ## More
 
 - [docs/gamecube-build.md](docs/gamecube-build.md): how the port is made from the PC repo, and how to build it.
