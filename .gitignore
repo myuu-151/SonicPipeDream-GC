@@ -15,3 +15,4 @@ proj/Assets/Skies/
 
 # The builder's chosen folders (native/builder.py)
 native/.builder.json
+native/.toolchain.json

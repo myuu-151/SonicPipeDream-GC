@@ -47,7 +47,8 @@ You need:
   side (the builder lets you choose the PC one if it's elsewhere).
 - **[Octave-libogc](https://github.com/myuu-151/Octave-libogc)**, the v2.2 release or newer, with
   its GameCube engine library built (`Engine/Build/GCN/libEngine.a`).
-- **[devkitPro](https://devkitpro.org)** with devkitPPC.
+- **[devkitPro](https://devkitpro.org)** with devkitPPC, or [gekko-toolchain](https://github.com/myuu-151/gekko-toolchain) (the same toolchain in one
+  zip). With both, the builder's **GameCube toolchain** switch picks one.
 - **Python 3** with Pillow and numpy: `py -m pip install pillow numpy`.
 
 Double-click **`Build Sonic Pipe Dream.bat`**. The builder window checks each of those and says
